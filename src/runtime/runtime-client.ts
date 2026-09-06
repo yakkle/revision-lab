@@ -85,7 +85,9 @@ export class RuntimeClient {
     const value = await this.runPython(source);
     const parsed: unknown = JSON.parse(value);
     if (!isPgResult(parsed)) throw new RuntimeClientError({ code: "RUNTIME_INVALID_RESPONSE", message: "Python returned an invalid RPC result" });
-    if (!parsed.ok && ["RPC_TIMEOUT", "RPC_WORKER_TERMINATED", "RPC_PROTOCOL_ERROR"].includes(parsed.error.code)) await this.restart();
+    if (!parsed.ok && ["RPC_TIMEOUT", "RPC_WORKER_TERMINATED", "RPC_PROTOCOL_ERROR"].includes(parsed.error.code)) {
+      void this.restart().catch(() => undefined);
+    }
     return parsed;
   }
 
