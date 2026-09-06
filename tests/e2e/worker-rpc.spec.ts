@@ -28,6 +28,13 @@ test("returns a 15 second timeout and restarts both Workers", async ({ page }) =
   test.setTimeout(120_000);
   const timedOut = await page.evaluate(() => window.__revisionLabT2!.query("SELECT pg_sleep(16)"));
   expect(timedOut).toMatchObject({ ok: false, error: { code: "RPC_TIMEOUT" } });
-  const afterRestart = await page.evaluate(() => window.__revisionLabT2!.query("SELECT 1 AS ready"));
-  expect(afterRestart).toMatchObject({ ok: true, rowCount: 1 });
+  const afterRestart = await page.evaluate(async () => {
+    try {
+      return { result: await window.__revisionLabT2!.query("SELECT 1 AS ready") };
+    } catch (error) {
+      const runtimeError = error as Error & { fault?: unknown };
+      return { thrown: { name: runtimeError.name, message: runtimeError.message, fault: runtimeError.fault, stack: runtimeError.stack } };
+    }
+  });
+  expect(afterRestart, JSON.stringify(afterRestart)).toMatchObject({ result: { ok: true, rowCount: 1 } });
 });

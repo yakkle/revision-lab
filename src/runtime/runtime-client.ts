@@ -59,23 +59,33 @@ export class RuntimeClient {
   private pgliteWorker?: Worker;
   private control?: Int32Array;
   private starting?: Promise<void>;
+  private recovering?: Promise<void>;
   private readonly workspaceId = `t2-${crypto.randomUUID()}`;
   private readonly pending = new Map<string, { resolve: (value: string) => void; reject: (error: Error) => void }>();
 
   start(): Promise<void> {
+    if (this.recovering) return this.recovering;
     this.starting ??= this.boot();
     return this.starting;
   }
 
   async restart(): Promise<void> {
+    if (this.recovering) return this.recovering;
     this.stop(new RuntimeClientError({ code: "RUNTIME_RESTARTED", message: "Runtime Workers restarted" }));
-    this.starting = this.boot();
-    await this.starting;
+    this.starting = undefined;
+    const recovery = this.restartWorkers();
+    this.recovering = recovery;
+    try {
+      await recovery;
+    } finally {
+      if (this.recovering === recovery) this.recovering = undefined;
+    }
   }
 
   close(): void {
     this.stop(new RuntimeClientError({ code: "RUNTIME_CLOSED", message: "Runtime closed" }));
     this.starting = undefined;
+    this.recovering = undefined;
   }
 
   async query(sql: string, params: unknown[] = []): Promise<PgResult> {
@@ -169,6 +179,25 @@ json.dumps({"ddl": ddl, "insert": insert, "select": selected, "databaseError": d
       this.starting = undefined;
       throw error;
     }
+  }
+
+  private async restartWorkers(): Promise<void> {
+    await new Promise((resolve) => window.setTimeout(resolve, 500));
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        this.starting = this.boot();
+        await this.starting;
+        return;
+      } catch (error) {
+        lastError = error;
+        this.starting = undefined;
+        if (attempt === 0) await new Promise((resolve) => window.setTimeout(resolve, 1_000));
+      }
+    }
+    throw lastError instanceof Error
+      ? lastError
+      : new RuntimeClientError({ code: "RUNTIME_RESTART_FAILED", message: "Runtime Workers could not be restarted" });
   }
 
   private readonly handlePythonMessage = (event: MessageEvent<unknown>) => {
