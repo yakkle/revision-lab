@@ -1,0 +1,20 @@
+{
+  "formatVersion": 1,
+  "assets": {
+    "pyodide": {
+      "version": "314.0.6",
+      "basePath": "runtime/pyodide/"
+    },
+    "pythonPackages": {
+      "basePath": "runtime/wheels/",
+      "packages": {
+        "alembic": "1.19.1",
+        "sqlalchemy": "2.0.48"
+      }
+    },
+    "pglite": {
+      "version": "0.5.8",
+      "basePath": "runtime/pglite/"
+    }
+  }
+}
