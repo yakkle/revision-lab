@@ -59,6 +59,8 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
+`dev`와 `build`는 lockfile에 고정된 Pyodide 및 PGlite 런타임 파일을 `public/runtime`에 준비한 뒤 Vite를 실행한다.
+
 주요 검증 명령은 다음과 같다.
 
 ```bash
@@ -70,4 +72,3 @@ pnpm test:e2e
 ```
 
 배포 환경별 격리 헤더와 PostgreSQL capability 차이는 [배포 환경](docs/DEPLOYMENT.md)을 참고한다.
-

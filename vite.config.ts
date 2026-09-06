@@ -11,6 +11,7 @@ const isolationHeaders = {
 export default defineConfig({
   base: process.env.VITE_BASE_PATH ?? "/",
   plugins: [react()],
+  worker: { format: "es" },
   server: {
     headers: isolationHeaders,
   },

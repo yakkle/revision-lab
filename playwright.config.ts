@@ -14,7 +14,7 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: "pnpm build && pnpm preview --host 127.0.0.1 --port 4173",
+      command: "pnpm build:e2e && pnpm preview --host 127.0.0.1 --port 4173",
       port: 4173,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,

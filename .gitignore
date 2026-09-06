@@ -6,5 +6,7 @@ test-results
 .DS_Store
 *.local
 *.tsbuildinfo
+public/runtime/pyodide/
+public/runtime/pglite/
 
 docs/TASKS.md
