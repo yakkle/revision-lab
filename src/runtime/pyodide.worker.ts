@@ -1,7 +1,11 @@
 /// <reference lib="webworker" />
 import type { PyodideInterface } from "pyodide";
-import { isPythonRun, isTaggedValue, isWorkerBoot, type PythonReply, type TaggedValue } from "./protocol";
+import {
+  isEnvelope, isPythonRun, isSqliteRuntimeRequest, isSqliteWorkerBoot, isTaggedValue, isWorkerBoot,
+  type PythonReply, type SqliteRuntimeReply, type TaggedValue,
+} from "./protocol";
 import { SyncRpc } from "./sync-rpc";
+import SQLITE_RUNTIME_SOURCE from "./python/sqlite_runtime.py?raw";
 
 declare const self: DedicatedWorkerGlobalScope;
 
@@ -50,13 +54,40 @@ def pg_query(sql, params=None):
 `;
 
 let pyodide: PyodideInterface | undefined;
-let bootContext: { protocolVersion: 1; workspaceId: string } | undefined;
+let bootContext: { protocolVersion: 1; workspaceId: string; mode: "technical-probe" | "sqlite" } | undefined;
 
-function send(reply: PythonReply): void {
+function send(reply: PythonReply | SqliteRuntimeReply): void {
   self.postMessage(reply);
 }
 
 self.onmessage = async (event: MessageEvent<unknown>) => {
+  if (isSqliteWorkerBoot(event.data)) {
+    const boot = event.data;
+    try {
+      const pyodideBase = new URL("pyodide/", boot.assetBase);
+      const pyodideModule = await import(/* @vite-ignore */ new URL("pyodide.mjs", pyodideBase).href) as typeof import("pyodide");
+      pyodide = await pyodideModule.loadPyodide({ indexURL: pyodideBase.href });
+      await pyodide.loadPackage(["micropip", "sqlalchemy", "markupsafe"]);
+      const wheelBase = new URL("wheels/", boot.assetBase);
+      pyodide.globals.set("__revision_lab_wheels", [
+        new URL("mako-1.3.10-py3-none-any.whl", wheelBase).href,
+        new URL("alembic-1.19.1-py3-none-any.whl", wheelBase).href,
+      ]);
+      await pyodide.runPythonAsync("import micropip\nawait micropip.install(__revision_lab_wheels, deps=False)");
+      pyodide.globals.delete("__revision_lab_wheels");
+      pyodide.runPython(SQLITE_RUNTIME_SOURCE);
+      bootContext = { protocolVersion: boot.protocolVersion, workspaceId: boot.workspaceId, mode: "sqlite" };
+      send({ ...boot, type: "READY" });
+    } catch (error) {
+      send({
+        ...boot,
+        type: "ERROR",
+        error: { code: "SQLITE_BOOT_FAILED", message: error instanceof Error ? error.message : String(error), traceback: error instanceof Error ? error.stack : undefined },
+      });
+    }
+    return;
+  }
+
   if (isWorkerBoot(event.data)) {
     const boot = event.data;
     try {
@@ -77,7 +108,7 @@ self.onmessage = async (event: MessageEvent<unknown>) => {
         return JSON.stringify(rpc.query(String(sql), decoded as TaggedValue[]));
       });
       pyodide.runPython(PYTHON_BRIDGE);
-      bootContext = { protocolVersion: boot.protocolVersion, workspaceId: boot.workspaceId };
+      bootContext = { protocolVersion: boot.protocolVersion, workspaceId: boot.workspaceId, mode: "technical-probe" };
       send({ protocolVersion: boot.protocolVersion, requestId: boot.requestId, workspaceId: boot.workspaceId, type: "READY" });
     } catch (error) {
       send({
@@ -92,6 +123,36 @@ self.onmessage = async (event: MessageEvent<unknown>) => {
   }
 
   const value = event.data;
+  if (bootContext?.mode === "sqlite") {
+    if (!isSqliteRuntimeRequest(value) || !pyodide || value.workspaceId !== bootContext.workspaceId) {
+      const context = isEnvelope(value)
+        ? { protocolVersion: value.protocolVersion, requestId: value.requestId, workspaceId: value.workspaceId }
+        : { protocolVersion: 1 as const, requestId: "invalid", workspaceId: "invalid" };
+      send({ ...context, type: "ERROR", error: { code: "RUNTIME_INVALID_REQUEST", message: "Invalid SQLite runtime request" } });
+      return;
+    }
+    try {
+      const request = JSON.stringify(value);
+      pyodide.globals.set("__revision_lab_request", request);
+      const encoded = String(pyodide.runPython("handle_safely(__revision_lab_request)"));
+      pyodide.globals.delete("__revision_lab_request");
+      const payload = JSON.parse(encoded) as SqliteRuntimeReply;
+      self.postMessage({
+        ...payload,
+        protocolVersion: value.protocolVersion,
+        requestId: value.requestId,
+        workspaceId: value.workspaceId,
+      });
+    } catch (error) {
+      send({
+        ...value,
+        type: "ERROR",
+        error: { code: "SQLITE_RUNTIME_ERROR", message: error instanceof Error ? error.message : String(error), traceback: error instanceof Error ? error.stack : undefined },
+      });
+    }
+    return;
+  }
+
   if (!isPythonRun(value) || !pyodide || !bootContext || value.workspaceId !== bootContext.workspaceId) {
     const context = isPythonRun(value) ? value : { protocolVersion: 1 as const, requestId: "invalid", workspaceId: "invalid" };
     send({ ...context, type: "ERROR", error: { code: "RUNTIME_INVALID_REQUEST", message: "Invalid Python Worker request" } });

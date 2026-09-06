@@ -22,7 +22,7 @@ export default function App() {
           </span>
           <span>Revision Lab</span>
         </a>
-        <span className="stage-label">Worker RPC · T2</span>
+        <span className="stage-label">SQLite Alembic runtime · T3</span>
       </header>
 
       <section className="hero" aria-labelledby="hero-title">
@@ -119,7 +119,7 @@ export default function App() {
 
         <p className="selection-note" role="status">
           선택된 환경: <strong>{selectedMode === "sqlite" ? "SQLite" : "PostgreSQL"}</strong>
-          <span>PostgreSQL Worker bridge 검증 중 · Alembic runtime은 후속 태스크에서 연결됩니다.</span>
+          <span>SQLite Alembic runtime 연결 완료 · PostgreSQL dialect는 후속 태스크에서 연결됩니다.</span>
         </p>
 
         <ul className="diagnostic-list" aria-label="브라우저 기능 진단 결과">

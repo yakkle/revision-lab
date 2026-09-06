@@ -1,4 +1,7 @@
 import { runtimeClient } from "./runtime-client";
+import { SqliteRuntimeClient } from "./sqlite-runtime-client";
+
+const sqliteRuntime = new SqliteRuntimeClient();
 
 declare global {
   interface Window {
@@ -8,7 +11,28 @@ declare global {
       restart: typeof runtimeClient.restart;
       close: typeof runtimeClient.close;
     };
+    __revisionLabT3?: {
+      workspaceId: string;
+      createWorkspace: typeof sqliteRuntime.createWorkspace;
+      runAlembic: typeof sqliteRuntime.runAlembic;
+      readFile: typeof sqliteRuntime.readFile;
+      writeFile: typeof sqliteRuntime.writeFile;
+      inspect: typeof sqliteRuntime.inspect;
+      close: typeof sqliteRuntime.close;
+    };
   }
+}
+
+if (import.meta.env.VITE_T3_TEST_HOOK === "1") {
+  window.__revisionLabT3 = {
+    workspaceId: sqliteRuntime.workspaceId,
+    createWorkspace: sqliteRuntime.createWorkspace.bind(sqliteRuntime),
+    runAlembic: sqliteRuntime.runAlembic.bind(sqliteRuntime),
+    readFile: sqliteRuntime.readFile.bind(sqliteRuntime),
+    writeFile: sqliteRuntime.writeFile.bind(sqliteRuntime),
+    inspect: sqliteRuntime.inspect.bind(sqliteRuntime),
+    close: sqliteRuntime.close.bind(sqliteRuntime),
+  };
 }
 
 if (import.meta.env.VITE_T2_TEST_HOOK === "1") {

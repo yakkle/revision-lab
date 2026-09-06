@@ -8,5 +8,6 @@ test-results
 *.tsbuildinfo
 public/runtime/pyodide/
 public/runtime/pglite/
+public/runtime/wheels/
 
 docs/TASKS.md

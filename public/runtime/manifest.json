@@ -9,7 +9,8 @@
       "basePath": "runtime/wheels/",
       "packages": {
         "alembic": "1.19.1",
-        "sqlalchemy": "2.0.48"
+        "sqlalchemy": "2.0.48",
+        "mako": "1.3.10"
       }
     },
     "pglite": {
