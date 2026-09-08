@@ -7,7 +7,7 @@ import {
 import { SyncRpc } from "./sync-rpc";
 import PGLITE_DBAPI_SOURCE from "./python/pglite_dbapi.py?raw";
 import PGLITE_SQLALCHEMY_SOURCE from "./python/pglite_sqlalchemy.py?raw";
-import SQLITE_RUNTIME_SOURCE from "./python/sqlite_runtime.py?raw";
+import ALEMBIC_RUNTIME_SOURCE from "./python/alembic_runtime.py?raw";
 
 declare const self: DedicatedWorkerGlobalScope;
 
@@ -60,7 +60,19 @@ def pg_execute_many(sql, param_sets):
 `;
 
 let pyodide: PyodideInterface | undefined;
-let bootContext: { protocolVersion: 1; workspaceId: string; mode: "technical-probe" | "sqlite" } | undefined;
+let bootContext: { protocolVersion: 1; workspaceId: string; mode: "technical-probe" | "sqlite" | "postgresql" } | undefined;
+
+async function loadAlembic(runtime: PyodideInterface, assetBase: string): Promise<void> {
+  await runtime.loadPackage(["micropip", "sqlalchemy", "markupsafe"]);
+  const wheelBase = new URL("wheels/", assetBase);
+  runtime.globals.set("__revision_lab_wheels", [
+    new URL("mako-1.3.10-py3-none-any.whl", wheelBase).href,
+    new URL("alembic-1.19.1-py3-none-any.whl", wheelBase).href,
+  ]);
+  await runtime.runPythonAsync("import micropip\nawait micropip.install(__revision_lab_wheels, deps=False)");
+  runtime.globals.delete("__revision_lab_wheels");
+  runtime.runPython(ALEMBIC_RUNTIME_SOURCE);
+}
 
 function send(reply: PythonReply | SqliteRuntimeReply): void {
   self.postMessage(reply);
@@ -73,15 +85,7 @@ self.onmessage = async (event: MessageEvent<unknown>) => {
       const pyodideBase = new URL("pyodide/", boot.assetBase);
       const pyodideModule = await import(/* @vite-ignore */ new URL("pyodide.mjs", pyodideBase).href) as typeof import("pyodide");
       pyodide = await pyodideModule.loadPyodide({ indexURL: pyodideBase.href });
-      await pyodide.loadPackage(["micropip", "sqlalchemy", "markupsafe"]);
-      const wheelBase = new URL("wheels/", boot.assetBase);
-      pyodide.globals.set("__revision_lab_wheels", [
-        new URL("mako-1.3.10-py3-none-any.whl", wheelBase).href,
-        new URL("alembic-1.19.1-py3-none-any.whl", wheelBase).href,
-      ]);
-      await pyodide.runPythonAsync("import micropip\nawait micropip.install(__revision_lab_wheels, deps=False)");
-      pyodide.globals.delete("__revision_lab_wheels");
-      pyodide.runPython(SQLITE_RUNTIME_SOURCE);
+      await loadAlembic(pyodide, boot.assetBase);
       bootContext = { protocolVersion: boot.protocolVersion, workspaceId: boot.workspaceId, mode: "sqlite" };
       send({ ...boot, type: "READY" });
     } catch (error) {
@@ -141,7 +145,11 @@ _revision_lab_install_module("pglite_sqlalchemy", __revision_lab_dialect_source,
 `);
       pyodide.globals.delete("__revision_lab_dbapi_source");
       pyodide.globals.delete("__revision_lab_dialect_source");
-      bootContext = { protocolVersion: boot.protocolVersion, workspaceId: boot.workspaceId, mode: "technical-probe" };
+      if (boot.runtime === "alembic") {
+        await loadAlembic(pyodide, boot.assetBase);
+        pyodide.runPython('DATABASE_MODE = "postgresql"');
+      }
+      bootContext = { protocolVersion: boot.protocolVersion, workspaceId: boot.workspaceId, mode: boot.runtime === "alembic" ? "postgresql" : "technical-probe" };
       send({ protocolVersion: boot.protocolVersion, requestId: boot.requestId, workspaceId: boot.workspaceId, type: "READY" });
     } catch (error) {
       send({
@@ -156,12 +164,12 @@ _revision_lab_install_module("pglite_sqlalchemy", __revision_lab_dialect_source,
   }
 
   const value = event.data;
-  if (bootContext?.mode === "sqlite") {
+  if (bootContext?.mode === "sqlite" || bootContext?.mode === "postgresql") {
     if (!isSqliteRuntimeRequest(value) || !pyodide || value.workspaceId !== bootContext.workspaceId) {
       const context = isEnvelope(value)
         ? { protocolVersion: value.protocolVersion, requestId: value.requestId, workspaceId: value.workspaceId }
         : { protocolVersion: 1 as const, requestId: "invalid", workspaceId: "invalid" };
-      send({ ...context, type: "ERROR", error: { code: "RUNTIME_INVALID_REQUEST", message: "Invalid SQLite runtime request" } });
+      send({ ...context, type: "ERROR", error: { code: "RUNTIME_INVALID_REQUEST", message: "Invalid Alembic runtime request" } });
       return;
     }
     try {
@@ -180,7 +188,7 @@ _revision_lab_install_module("pglite_sqlalchemy", __revision_lab_dialect_source,
       send({
         ...value,
         type: "ERROR",
-        error: { code: "SQLITE_RUNTIME_ERROR", message: error instanceof Error ? error.message : String(error), traceback: error instanceof Error ? error.stack : undefined },
+        error: { code: "ALEMBIC_RUNTIME_ERROR", message: error instanceof Error ? error.message : String(error), traceback: error instanceof Error ? error.stack : undefined },
       });
     }
     return;

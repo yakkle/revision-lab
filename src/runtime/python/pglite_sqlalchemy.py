@@ -5,8 +5,15 @@ from __future__ import annotations
 from sqlalchemy.dialects import registry
 from sqlalchemy.dialects.postgresql.base import PGDialect
 from sqlalchemy.pool import StaticPool
+from sqlalchemy.sql import sqltypes
 
 import pglite_dbapi
+
+
+class PGliteString(sqltypes.String):
+    # Extended-query parameters need a type in polymorphic functions such as
+    # the Inspector's json_build_object(:key, ...).
+    render_bind_cast = True
 
 
 class PGliteDialect(PGDialect):
@@ -14,6 +21,7 @@ class PGliteDialect(PGDialect):
     default_paramstyle = "numeric_dollar"
     supports_statement_cache = True
     supports_server_side_cursors = False
+    colspecs = {**PGDialect.colspecs, sqltypes.String: PGliteString}
 
     @classmethod
     def import_dbapi(cls):

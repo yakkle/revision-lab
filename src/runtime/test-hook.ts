@@ -1,5 +1,6 @@
 import { runtimeClient } from "./runtime-client";
 import { SqliteRuntimeClient } from "./sqlite-runtime-client";
+import { AlembicRuntimeClient } from "./alembic-runtime-client";
 
 const sqliteRuntime = new SqliteRuntimeClient();
 
@@ -25,7 +26,21 @@ declare global {
       restart: typeof runtimeClient.restart;
       close: typeof runtimeClient.close;
     };
+    __revisionLabT5?: Window["__revisionLabT3"];
   }
+}
+
+if (import.meta.env.VITE_T5_TEST_HOOK === "1") {
+  const postgresqlRuntime = new AlembicRuntimeClient("postgresql");
+  window.__revisionLabT5 = {
+    workspaceId: postgresqlRuntime.workspaceId,
+    createWorkspace: postgresqlRuntime.createWorkspace.bind(postgresqlRuntime),
+    runAlembic: postgresqlRuntime.runAlembic.bind(postgresqlRuntime),
+    readFile: postgresqlRuntime.readFile.bind(postgresqlRuntime),
+    writeFile: postgresqlRuntime.writeFile.bind(postgresqlRuntime),
+    inspect: postgresqlRuntime.inspect.bind(postgresqlRuntime),
+    close: postgresqlRuntime.close.bind(postgresqlRuntime),
+  };
 }
 
 if (import.meta.env.VITE_T3_TEST_HOOK === "1") {

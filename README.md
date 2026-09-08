@@ -33,6 +33,7 @@ Revision Lab은 Alembic을 어렵게 느끼는 Python 백엔드 개발자가 브
 - [MVP 요구사항](docs/REQUIREMENTS.md)
 - [핵심 개념과 학습 모델](docs/CONCEPTS.md)
 - [기술 명세](docs/SPEC.md)
+- [T5 PostgreSQL Alembic 기능 동등성 검증](docs/T5.md)
 
 - [에이전트 작업 규칙](AGENTS.md)
 
@@ -72,3 +73,5 @@ pnpm test:e2e
 ```
 
 배포 환경별 격리 헤더와 PostgreSQL capability 차이는 [배포 환경](docs/DEPLOYMENT.md)을 참고한다.
+
+현재 두 DB 모드의 Alembic 실행·schema 조회 API까지 구현되어 있다. 시작 화면은 capability 진단 화면이며, 편집기·터미널·revision graph를 갖춘 Lab UI는 T6에서 연결한다.

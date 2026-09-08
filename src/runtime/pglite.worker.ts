@@ -135,7 +135,12 @@ self.onmessage = async (event: MessageEvent<unknown>) => {
         return result.blob();
       }),
     ]);
-    database = new PGlite({ dataDir: "memory://", pgliteWasmModule, initdbWasmModule, fsBundle });
+    database = new PGlite({
+      dataDir: "memory://", pgliteWasmModule, initdbWasmModule, fsBundle,
+      // Preserve JSON text across the tagged string transport. SQLAlchemy's
+      // JSON result processor decodes it in Python, without JS number loss.
+      parsers: { 114: (value) => value, 3802: (value) => value },
+    });
     await database.waitReady;
     workspaceId = boot.workspaceId;
     attachConnection(boot);

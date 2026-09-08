@@ -192,6 +192,8 @@ SQLSTATE class와 PGlite 오류 정보를 사용해 가능한 가장 구체적�
 - PostgreSQL base dialect를 상속하되 driver-specific socket, encoding, server-side cursor 동작은 사용하지 않는다.
 - SQLAlchemy Inspector가 table, column, PK/FK, unique/check, index를 읽을 수 있어야 한다.
 - Alembic autogenerate와 PostgreSQL transactional DDL을 지원한다.
+- PGlite의 extended query에서 Inspector의 `json_build_object` 문자열 매개변수 타입을 결정할 수 있도록 String bind cast를 활성화한다.
+- PostgreSQL JSON/JSONB 결과는 PGlite parser에서 원문 JSON 문자열로 유지하고 tagged string으로 전달한다. SQLAlchemy JSON result processor가 Python에서 해석한다. Inspector identity 조회에서 JavaScript 객체 변환과 숫자 정밀도 손실을 피한다.
 - COPY, large object, server-side cursor, two-phase transaction, 멀티 connection pool은 `NotSupportedError`로 명시한다.
 - MVP engine pool은 단일 logical connection을 재사용하는 형태로 제한한다.
 
@@ -202,6 +204,9 @@ SQLSTATE class와 PGlite 오류 정보를 사용해 가능한 가장 구체적�
 - 허용 명령: `init`, `revision`, `upgrade`, `downgrade`, `current`, `history`, `heads`, `branches`, `show`, `merge`.
 - 명령별 지원 option도 allowlist로 관리한다. 파일 경로는 workspace root 밖으로 나갈 수 없다.
 - 각 명령 전후에 파일 manifest, revision DAG, DB schema를 읽어 diff를 만든다.
+- `AlembicRuntimeClient(mode, workspaceId?)`와 `alembic_runtime.py`를 두 모드의 공통 실행기로 사용한다. 기존 `SqliteRuntimeClient`는 SQLite 모드를 선택하는 호환 wrapper다.
+- 생성되는 `env.py`는 PostgreSQL에서 dialect의 단일 연결 pool을 사용하고, `render_as_batch`는 SQLite에서만 활성화한다. 성공·실패 모두 engine을 dispose한 다음 실제 DB를 다시 inspect한다.
+- 같은 workspace의 중복 요청은 `RUNTIME_BUSY`로 거절한다. DBAPI 오류의 원본 SQLSTATE/detail/hint를 명령 오류에 보존한다.
 - 성공한 명령과 저장된 편집만 checkpoint 후보가 된다. 실패한 migration의 DB 실제 상태는 별도로 inspect하지만 성공 checkpoint를 덮어쓰지 않는다.
 
 ## 7. 상태와 영속화
@@ -234,6 +239,7 @@ type WorkspaceArchiveV1 = {
 
 - graph는 Alembic `ScriptDirectory`에서 생성한다.
 - schema는 SQLAlchemy Inspector 결과를 정규화하되 raw type SQL을 보존한다.
+- `ColumnSnapshot.type`은 해당 engine dialect로 compile한 표현을 사용한다. PostgreSQL `TIMESTAMP WITH TIME ZONE`, `JSONB`, `UUID`, `INTEGER[]` 등을 일반 문자열 타입으로 축약하지 않는다.
 - UI store는 선택된 파일, 열린 패널, 실행 중 상태만 소유한다.
 - IndexedDB에는 workspace metadata, checkpoint, lesson progress만 저장한다.
 - archive import 시 format version, 경로 traversal, 압축 해제 크기, 파일 개수를 검증한다.
@@ -256,3 +262,9 @@ Cloudflare Pages의 정적 `_headers`에 최소 다음 정책을 둔다.
 - migration Python은 Worker 안에서 실행하지만 임의 코드라는 사실을 UI에 알린다.
 - 외부 archive는 사용자 확인 전 실행하지 않는다.
 - 공개 배포, commit, push는 별도 명시적 승인 없이는 수행하지 않는다.
+
+## 9. T5 구현 범위와 후속 작업
+
+- 두 모드의 Alembic online 명령, revision graph, schema snapshot/diff API와 브라우저 통합 테스트가 구현되어 있다. 결과를 탐색하는 Lab UI는 T6, lesson validator와 Alice/Bob workspace 복제·통합은 T7에서 연결한다.
+- 현재 PGlite instance는 기존 기술 검증과 동일하게 `memory://`를 사용한다. 2.3절의 IndexedDB 데이터 디렉터리 및 checkpoint 저장·복원은 T8에서 완성한다.
+- T2 기술 검증 client의 PGlite 재연결 기능은 유지된다. 공통 Alembic client에는 아직 파일·DB를 함께 복구하는 경로가 없다. 전체 명령 timeout 또는 Worker crash에서는 실행기를 종료하고 후속 요청을 거절하며, 빈 workspace를 자동 생성하지 않는다. 4.3절의 통합 복구는 T8의 완료 조건이다.

@@ -26,6 +26,7 @@ export type PgExecuteMany = Envelope & { op: "EXECUTE_MANY"; sequence: number; s
 export type PgRequest = PgQuery | PgExecuteMany;
 export type WorkerBoot = Envelope & {
   type: "BOOT";
+  runtime?: "alembic";
   port: MessagePort;
   control: SharedArrayBuffer;
   response: SharedArrayBuffer;
@@ -71,7 +72,7 @@ export type TableSnapshot = {
   checkConstraints: Array<{ name: string | null; sqlText: string }>;
   indexes: Array<{ name: string; columns: string[]; unique: boolean }>;
 };
-export type SchemaSnapshot = { dialect: "sqlite"; tables: TableSnapshot[]; alembicVersion: string[] };
+export type SchemaSnapshot = { dialect: DatabaseMode; tables: TableSnapshot[]; alembicVersion: string[] };
 export type WorkspaceState = { files: string[]; revisions: RevisionNode[]; schema: SchemaSnapshot };
 export type SchemaObjectKind = "table" | "column" | "primaryKey" | "foreignKey" | "uniqueConstraint" | "checkConstraint" | "index";
 export type SchemaChange = {
@@ -117,6 +118,10 @@ export type PythonReply = Envelope & (
   | { type: "ERROR"; error: RpcFault }
 );
 
+// SQLite's original names remain available to existing T3 consumers.
+export type AlembicRuntimeRequest = SqliteRuntimeRequest;
+export type AlembicRuntimeReply = SqliteRuntimeReply;
+
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -159,6 +164,7 @@ export function isPgRequest(value: unknown): value is PgRequest {
 
 export function isWorkerBoot(value: unknown): value is WorkerBoot {
   if (!isEnvelope(value) || !isRecord(value) || value.type !== "BOOT") return false;
+  if (value.runtime !== undefined && value.runtime !== "alembic") return false;
   try {
     return value.port instanceof MessagePort && value.control instanceof SharedArrayBuffer && value.control.byteLength === CONTROL_BYTES &&
       value.response instanceof SharedArrayBuffer && value.response.byteLength === RESPONSE_BYTES &&
@@ -229,7 +235,7 @@ function isTableSnapshot(value: unknown): value is TableSnapshot {
 
 function isWorkspaceState(value: unknown): value is WorkspaceState {
   return isRecord(value) && isStringArray(value.files) && Array.isArray(value.revisions) && value.revisions.every(isRevisionNode) &&
-    isRecord(value.schema) && value.schema.dialect === "sqlite" && Array.isArray(value.schema.tables) &&
+    isRecord(value.schema) && (value.schema.dialect === "sqlite" || value.schema.dialect === "postgresql") && Array.isArray(value.schema.tables) &&
     value.schema.tables.every(isTableSnapshot) && isStringArray(value.schema.alembicVersion);
 }
 
@@ -259,6 +265,9 @@ export function isSqliteRuntimeReply(value: unknown): value is SqliteRuntimeRepl
 export function rpcError(code: string, message = code): PgResult {
   return { ok: false, error: { code, message } };
 }
+
+export const isAlembicRuntimeRequest = isSqliteRuntimeRequest;
+export const isAlembicRuntimeReply = isSqliteRuntimeReply;
 
 export function isPgResult(value: unknown): value is PgResult {
   if (!isRecord(value)) return false;

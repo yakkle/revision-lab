@@ -7,7 +7,6 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import re
-import sqlite3
 import traceback
 from typing import Any
 
@@ -20,6 +19,7 @@ from sqlalchemy import create_engine, inspect
 WORKSPACES = Path("/workspaces")
 TEXT_SUFFIXES = {".ini", ".mako", ".py", ".sql", ".txt"}
 MAX_FILE_BYTES = 1024 * 1024
+DATABASE_MODE = "sqlite"
 
 ENV_TEMPLATE = '''from logging.config import fileConfig
 from pathlib import Path
@@ -27,7 +27,7 @@ import runpy
 import sys
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import engine_from_config
 
 config = context.config
 if config.config_file_name is not None:
@@ -49,12 +49,19 @@ def run_migrations_online():
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
     )
-    with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata, render_as_batch=True)
-        with context.begin_transaction():
-            context.run_migrations()
+    try:
+        with connectable.connect() as connection:
+            context.configure(
+                connection=connection,
+                target_metadata=target_metadata,
+                render_as_batch=connection.dialect.name == "sqlite",
+                compare_type=True,
+            )
+            with context.begin_transaction():
+                context.run_migrations()
+    finally:
+        connectable.dispose()
 
 
 if context.is_offline_mode():
@@ -96,6 +103,8 @@ def _relative_path(root: Path, value: str, *, suffix_required: bool = True) -> P
 
 
 def _database_url(root: Path) -> str:
+    if DATABASE_MODE == "postgresql":
+        return "postgresql+pglite://"
     return f"sqlite:///{root / 'database.sqlite'}"
 
 
@@ -139,20 +148,10 @@ def _file_changes(before: dict[str, str], after: dict[str, str]) -> list[dict[st
     return changes
 
 
-def _version_rows(root: Path) -> list[str]:
-    database = root / "database.sqlite"
-    if not database.exists():
+def _version_rows(connection, inspector) -> list[str]:
+    if not inspector.has_table("alembic_version"):
         return []
-    connection = sqlite3.connect(database)
-    try:
-        exists = connection.execute(
-            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'alembic_version'"
-        ).fetchone()
-        if not exists:
-            return []
-        return sorted(str(row[0]) for row in connection.execute("SELECT version_num FROM alembic_version"))
-    finally:
-        connection.close()
+    return sorted(str(row[0]) for row in connection.exec_driver_sql("SELECT version_num FROM alembic_version"))
 
 
 def _revision_graph(root: Path, current: set[str]) -> list[dict[str, Any]]:
@@ -191,8 +190,9 @@ def _json_value(value: Any) -> Any:
 
 def _schema(root: Path) -> dict[str, Any]:
     engine = create_engine(_database_url(root))
+    connection = engine.connect()
     try:
-        inspector = inspect(engine)
+        inspector = inspect(connection)
         tables: list[dict[str, Any]] = []
         for table_name in sorted(name for name in inspector.get_table_names() if name != "alembic_version"):
             pk = inspector.get_pk_constraint(table_name)
@@ -202,7 +202,7 @@ def _schema(root: Path) -> dict[str, Any]:
                 name = str(column["name"])
                 columns.append({
                     "name": name,
-                    "type": str(column["type"]),
+                    "type": column["type"].compile(dialect=engine.dialect),
                     "nullable": bool(column.get("nullable", True)),
                     "default": None if column.get("default") is None else str(column["default"]),
                     "primaryKeyPosition": pk_columns.index(name) + 1 if name in pk_columns else 0,
@@ -236,8 +236,9 @@ def _schema(root: Path) -> dict[str, Any]:
                 "checkConstraints": check_constraints,
                 "indexes": indexes,
             })
-        return {"dialect": "sqlite", "tables": tables, "alembicVersion": _version_rows(root)}
+        return {"dialect": DATABASE_MODE, "tables": tables, "alembicVersion": _version_rows(connection, inspector)}
     finally:
+        connection.close()
         engine.dispose()
 
 
@@ -439,7 +440,8 @@ def _dispatch(root: Path, argv: list[str], stdout: io.StringIO) -> None:
 
 def _create_workspace(root: Path) -> dict[str, Any]:
     root.mkdir(parents=True, exist_ok=True)
-    (root / "database.sqlite").touch(exist_ok=True)
+    if DATABASE_MODE == "sqlite":
+        (root / "database.sqlite").touch(exist_ok=True)
     return _state(root)
 
 
@@ -461,6 +463,11 @@ def _run_alembic(root: Path, argv: list[str]) -> dict[str, Any]:
             "message": str(exception),
             "traceback": trace,
         }
+        original = getattr(exception, "orig", exception)
+        for attribute, key in (("sqlstate", "sqlState"), ("detail", "detail"), ("hint", "hint")):
+            value = getattr(original, attribute, None)
+            if value is not None:
+                error[key] = value
     after_manifest = _file_manifest(root)
     after = _state(root)
     result: dict[str, Any] = {
@@ -527,5 +534,5 @@ def handle_safely(request_json: str) -> str:
     except Exception as exception:
         return json.dumps({
             "type": "ERROR",
-            "error": {"code": "SQLITE_RUNTIME_ERROR", "message": str(exception), "traceback": traceback.format_exc()},
+            "error": {"code": "ALEMBIC_RUNTIME_ERROR", "message": str(exception), "traceback": traceback.format_exc()},
         })

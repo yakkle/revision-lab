@@ -1,10 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   CONTROL_BYTES, PROTOCOL_VERSION, RESPONSE_BYTES, isPGliteReconnect, isPgQuery, isPgRequest, isSqliteRuntimeRequest,
-  isTaggedValue, isWorkerBoot,
+  isTaggedValue, isWorkerBoot, isAlembicRuntimeReply,
 } from "./protocol";
 
 describe("runtime protocol validation", () => {
+  it("accepts both database snapshots and rejects an unknown dialect", () => {
+    const envelope = { protocolVersion: PROTOCOL_VERSION, requestId: "snapshot-1", workspaceId: "lab_1", type: "STATE_SNAPSHOT" };
+    for (const dialect of ["sqlite", "postgresql", "mysql"]) {
+      expect(isAlembicRuntimeReply({ ...envelope, state: {
+        files: [], revisions: [], schema: { dialect, tables: [], alembicVersion: ["a1", "b1"] },
+      } })).toBe(dialect !== "mysql");
+    }
+  });
   it("accepts a complete query envelope and rejects lossy numbers", () => {
     expect(isPgQuery({
       protocolVersion: PROTOCOL_VERSION,
