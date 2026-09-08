@@ -22,6 +22,8 @@ export type PgResult =
   | { ok: true; rows: TaggedValue[][]; fields: Array<{ name: string; dataTypeId: number }>; rowCount: number; commandTag?: string }
   | { ok: false; error: RpcFault };
 export type PgQuery = Envelope & { op: "QUERY"; sequence: number; sql: string; params: TaggedValue[] };
+export type PgExecuteMany = Envelope & { op: "EXECUTE_MANY"; sequence: number; sql: string; paramSets: TaggedValue[][] };
+export type PgRequest = PgQuery | PgExecuteMany;
 export type WorkerBoot = Envelope & {
   type: "BOOT";
   port: MessagePort;
@@ -145,6 +147,14 @@ export function isPgQuery(value: unknown): value is PgQuery {
   return isEnvelope(value) && isRecord(value) && value.op === "QUERY" &&
     Number.isInteger(value.sequence) && Number(value.sequence) > 0 && typeof value.sql === "string" &&
     Array.isArray(value.params) && value.params.every(isTaggedValue);
+}
+
+export function isPgRequest(value: unknown): value is PgRequest {
+  if (isPgQuery(value)) return true;
+  return isEnvelope(value) && isRecord(value) && value.op === "EXECUTE_MANY" &&
+    Number.isInteger(value.sequence) && Number(value.sequence) > 0 && typeof value.sql === "string" &&
+    Array.isArray(value.paramSets) && value.paramSets.every((params) =>
+      Array.isArray(params) && params.every(isTaggedValue));
 }
 
 export function isWorkerBoot(value: unknown): value is WorkerBoot {

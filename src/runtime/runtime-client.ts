@@ -13,6 +13,24 @@ export type ProbeReport = {
   elapsedMs: number;
 };
 
+export type DbapiProbeReport = {
+  engine: { dialect: string; driver: string };
+  selected: { id: number; parentId: number; code: string; score: number };
+  executemanyRowCount: number;
+  rolledBackCount: number;
+  values: { value: string; type: string }[];
+  inspection: {
+    primaryKey: string[];
+    foreignKeys: Array<{ columns: string[]; referredTable: string; referredColumns: string[] }>;
+    uniqueConstraints: string[][];
+    checkConstraints: string[];
+    indexes: Array<{ name: string; columns: string[]; unique: boolean }>;
+  };
+  integrityError: { className: string; sqlState?: string; message: string };
+  unsupportedError: { className: string; code?: string };
+  secondConnectionError: { className: string; code?: string };
+};
+
 export class RuntimeClientError extends Error {
   constructor(readonly fault: RpcFault) {
     super(fault.message);
@@ -134,6 +152,127 @@ json.dumps({"ddl": ddl, "insert": insert, "select": selected, "databaseError": d
     active = false;
     const parsed = JSON.parse(value) as Omit<ProbeReport, "animationFrames" | "elapsedMs">;
     return { ...parsed, animationFrames, elapsedMs: Math.round(performance.now() - started) };
+  }
+
+  async runDbapiProbe(): Promise<DbapiProbeReport> {
+    const value = await this.runPython(String.raw`
+import datetime
+import decimal
+import json
+
+import pglite_dbapi
+from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.exc import IntegrityError as SAIntegrityError
+
+engine = create_engine("postgresql+pglite://")
+with engine.connect() as connection:
+    connection.exec_driver_sql("DROP TABLE IF EXISTS t4_children")
+    connection.exec_driver_sql("DROP TABLE IF EXISTS t4_parents")
+    connection.exec_driver_sql("CREATE TABLE t4_parents (id integer PRIMARY KEY)")
+    connection.exec_driver_sql("""CREATE TABLE t4_children (
+        id integer PRIMARY KEY,
+        parent_id integer NOT NULL REFERENCES t4_parents(id),
+        code text NOT NULL CONSTRAINT uq_t4_children_code UNIQUE,
+        score integer NOT NULL CONSTRAINT ck_t4_children_score CHECK (score >= 0)
+    )""")
+    connection.exec_driver_sql("CREATE INDEX ix_t4_children_parent_id ON t4_children (parent_id)")
+    connection.execute(text("INSERT INTO t4_parents (id) VALUES (:id)"), [{"id": 1}, {"id": 2}])
+    inserted = connection.execute(
+        text("INSERT INTO t4_children (id, parent_id, code, score) VALUES (:id, :parent_id, :code, :score)"),
+        [
+            {"id": 1, "parent_id": 1, "code": "alpha", "score": 10},
+            {"id": 2, "parent_id": 2, "code": "beta", "score": 20},
+        ],
+    )
+    executemany_row_count = inserted.rowcount
+    connection.commit()
+
+    selected_row = connection.execute(
+        text("SELECT id, parent_id, code, score FROM t4_children WHERE id = :id"), {"id": 2}
+    ).mappings().one()
+    selected = {
+        "id": selected_row["id"],
+        "parentId": selected_row["parent_id"],
+        "code": selected_row["code"],
+        "score": selected_row["score"],
+    }
+    connection.execute(text("INSERT INTO t4_children (id, parent_id, code, score) VALUES (3, 1, 'rollback', 30)"))
+    connection.rollback()
+    rolled_back_count = connection.scalar(text("SELECT count(*) FROM t4_children WHERE id = 3"))
+
+    raw_connection = connection.connection.driver_connection
+    cursor = raw_connection.cursor()
+    cursor.execute(
+        "SELECT $1::bigint, $2::numeric, $3::date, $4::bytea",
+        (9007199254740993, decimal.Decimal("1234567890.12345"), datetime.date(2026, 9, 8), b"revision-lab"),
+    )
+    codec_row = cursor.fetchone()
+    values = [{"value": str(item), "type": type(item).__name__} for item in codec_row]
+    cursor.close()
+    raw_connection.rollback()
+
+    inspector = inspect(connection)
+    primary_key = inspector.get_pk_constraint("t4_children")
+    foreign_keys = inspector.get_foreign_keys("t4_children")
+    unique_constraints = inspector.get_unique_constraints("t4_children")
+    check_constraints = inspector.get_check_constraints("t4_children")
+    indexes = inspector.get_indexes("t4_children")
+    inspection = {
+        "primaryKey": primary_key["constrained_columns"],
+        "foreignKeys": [
+            {
+                "columns": item["constrained_columns"],
+                "referredTable": item["referred_table"],
+                "referredColumns": item["referred_columns"],
+            }
+            for item in foreign_keys
+        ],
+        "uniqueConstraints": [item["column_names"] for item in unique_constraints],
+        "checkConstraints": [item["sqltext"] for item in check_constraints],
+        "indexes": [
+            {"name": item["name"], "columns": item["column_names"], "unique": item["unique"]}
+            for item in indexes
+        ],
+    }
+
+    try:
+        connection.execute(text("INSERT INTO t4_children (id, parent_id, code, score) VALUES (4, 1, 'alpha', 40)"))
+        integrity_error = {"className": "missing", "message": "constraint did not fail"}
+    except SAIntegrityError as error:
+        original = error.orig
+        integrity_error = {
+            "className": type(original).__name__,
+            "sqlState": original.sqlstate,
+            "message": str(original),
+        }
+        connection.rollback()
+
+    try:
+        raw_connection.cursor().callproc("unsupported")
+        unsupported_error = {"className": "missing"}
+    except pglite_dbapi.NotSupportedError as error:
+        unsupported_error = {"className": type(error).__name__, "code": error.code}
+
+    try:
+        pglite_dbapi.connect()
+        second_connection_error = {"className": "missing"}
+    except pglite_dbapi.InterfaceError as error:
+        second_connection_error = {"className": type(error).__name__, "code": error.code}
+
+report = {
+    "engine": {"dialect": engine.dialect.name, "driver": engine.dialect.driver},
+    "selected": selected,
+    "executemanyRowCount": executemany_row_count,
+    "rolledBackCount": rolled_back_count,
+    "values": values,
+    "inspection": inspection,
+    "integrityError": integrity_error,
+    "unsupportedError": unsupported_error,
+    "secondConnectionError": second_connection_error,
+}
+json.dumps(report)
+`);
+    return JSON.parse(value) as DbapiProbeReport;
   }
 
   private async runPython(source: string): Promise<string> {

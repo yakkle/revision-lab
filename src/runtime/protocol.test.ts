@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  CONTROL_BYTES, PROTOCOL_VERSION, RESPONSE_BYTES, isPGliteReconnect, isPgQuery, isSqliteRuntimeRequest,
+  CONTROL_BYTES, PROTOCOL_VERSION, RESPONSE_BYTES, isPGliteReconnect, isPgQuery, isPgRequest, isSqliteRuntimeRequest,
   isTaggedValue, isWorkerBoot,
 } from "./protocol";
 
@@ -16,6 +16,18 @@ describe("runtime protocol validation", () => {
       params: [{ tag: "number", value: 7 }],
     })).toBe(true);
     expect(isTaggedValue({ tag: "number", value: Number.MAX_SAFE_INTEGER + 1 })).toBe(false);
+  });
+
+  it("validates execute-many parameter sets", () => {
+    const envelope = { protocolVersion: PROTOCOL_VERSION, requestId: "request-2", workspaceId: "workspace_1" };
+    expect(isPgRequest({
+      ...envelope,
+      op: "EXECUTE_MANY",
+      sequence: 2,
+      sql: "insert into items values ($1)",
+      paramSets: [[{ tag: "number", value: 1 }], [{ tag: "number", value: 2 }]],
+    })).toBe(true);
+    expect(isPgRequest({ ...envelope, op: "EXECUTE_MANY", sequence: 2, sql: "select 1", paramSets: ["invalid"] })).toBe(false);
   });
 
   it("rejects traversal-like workspace identifiers and malformed buffers", () => {

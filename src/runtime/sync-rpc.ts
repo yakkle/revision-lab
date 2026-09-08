@@ -1,7 +1,11 @@
 import {
   CONTROL, RESPONSE_BYTES, RPC_TIMEOUT_MS, STATE, isPgResult, rpcError,
-  type Envelope, type PgQuery, type PgResult, type TaggedValue,
+  type Envelope, type PgRequest, type PgResult, type TaggedValue,
 } from "./protocol";
+
+type PgPayload =
+  | { op: "QUERY"; sql: string; params: TaggedValue[] }
+  | { op: "EXECUTE_MANY"; sql: string; paramSets: TaggedValue[][] };
 
 export function publishResponse(control: Int32Array, response: Uint8Array, sequence: number, value: PgResult): void {
   if (Atomics.load(control, CONTROL.STATE) !== STATE.WAITING) return;
@@ -36,18 +40,24 @@ export class SyncRpc {
   ) {}
 
   query(sql: string, params: TaggedValue[]): PgResult {
+    return this.request({ op: "QUERY", sql, params });
+  }
+
+  executeMany(sql: string, paramSets: TaggedValue[][]): PgResult {
+    return this.request({ op: "EXECUTE_MANY", sql, paramSets });
+  }
+
+  private request(payload: PgPayload): PgResult {
     if (this.broken) return rpcError("RPC_CONNECTION_BROKEN");
     if (Atomics.load(this.control, CONTROL.STATE) !== STATE.IDLE) return rpcError("RPC_BUSY");
 
     const sequence = ++this.sequence;
-    const request: PgQuery = {
+    const request = {
       ...this.context,
       requestId: `${this.context.requestId}:${sequence}`,
-      op: "QUERY",
       sequence,
-      sql,
-      params,
-    };
+      ...payload,
+    } as PgRequest;
     Atomics.store(this.control, CONTROL.REQUEST_SEQUENCE, sequence);
     Atomics.store(this.control, CONTROL.STATE, STATE.WAITING);
     this.port.postMessage(request);

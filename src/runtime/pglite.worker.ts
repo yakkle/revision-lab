@@ -1,8 +1,8 @@
 /// <reference lib="webworker" />
 import { PGlite } from "@electric-sql/pglite";
 import {
-  CONTROL, STATE, isPGliteReconnect, isPgQuery, isWorkerBoot, rpcError,
-  type PGliteReconnect, type PgResult, type RpcFault, type WorkerBoot,
+  CONTROL, STATE, isPGliteReconnect, isPgRequest, isWorkerBoot, rpcError,
+  type PGliteReconnect, type PgResult, type RpcFault, type TaggedValue, type WorkerBoot,
 } from "./protocol";
 import { publishResponse } from "./sync-rpc";
 import { decodeValue, encodeValue } from "./value-codec";
@@ -32,6 +32,20 @@ function databaseFault(error: unknown): RpcFault {
   };
 }
 
+async function executeMany(sql: string, paramSets: TaggedValue[][]) {
+  if (paramSets.length === 0) {
+    return { rows: [], fields: [], rowCount: 0, affectedRows: 0, command: "" };
+  }
+  let rowCount = 0;
+  let last = await database!.query<unknown[]>(sql, paramSets[0]!.map(decodeValue), { rowMode: "array" });
+  rowCount += last.rowCount ?? last.affectedRows ?? last.rows.length;
+  for (const params of paramSets.slice(1)) {
+    last = await database!.query<unknown[]>(sql, params.map(decodeValue), { rowMode: "array" });
+    rowCount += last.rowCount ?? last.affectedRows ?? last.rows.length;
+  }
+  return { ...last, rows: [], rowCount, affectedRows: rowCount };
+}
+
 function attachConnection(connection: PGliteConnection): void {
   if (!database) throw new Error("PGlite is not initialized");
   const control = new Int32Array(connection.control);
@@ -40,7 +54,7 @@ function attachConnection(connection: PGliteConnection): void {
   activePort = connection.port;
   activePort.onmessage = async (requestEvent: MessageEvent<unknown>) => {
     const request = requestEvent.data;
-    if (!isPgQuery(request)) {
+    if (!isPgRequest(request)) {
       publishResponse(control, response, Atomics.load(control, CONTROL.REQUEST_SEQUENCE), rpcError("RPC_INVALID_REQUEST"));
       return;
     }
@@ -55,7 +69,9 @@ function attachConnection(connection: PGliteConnection): void {
 
     let result: PgResult;
     try {
-      const queryResult = await database!.query<unknown[]>(request.sql, request.params.map(decodeValue), { rowMode: "array" });
+      const queryResult = request.op === "QUERY"
+        ? await database!.query<unknown[]>(request.sql, request.params.map(decodeValue), { rowMode: "array" })
+        : await executeMany(request.sql, request.paramSets);
       const fields = queryResult.fields.map((field) => ({ name: field.name, dataTypeId: field.dataTypeID }));
       result = {
         ok: true,

@@ -5,6 +5,8 @@ import {
   type PythonReply, type SqliteRuntimeReply, type TaggedValue,
 } from "./protocol";
 import { SyncRpc } from "./sync-rpc";
+import PGLITE_DBAPI_SOURCE from "./python/pglite_dbapi.py?raw";
+import PGLITE_SQLALCHEMY_SOURCE from "./python/pglite_sqlalchemy.py?raw";
 import SQLITE_RUNTIME_SOURCE from "./python/sqlite_runtime.py?raw";
 
 declare const self: DedicatedWorkerGlobalScope;
@@ -51,6 +53,10 @@ def _tag(value):
 def pg_query(sql, params=None):
     tagged = [_tag(value) for value in (params or [])]
     return json.loads(str(__revision_lab_query(sql, json.dumps(tagged))))
+
+def pg_execute_many(sql, param_sets):
+    tagged_sets = [[_tag(value) for value in params] for params in param_sets]
+    return json.loads(str(__revision_lab_execute_many(sql, json.dumps(tagged_sets))))
 `;
 
 let pyodide: PyodideInterface | undefined;
@@ -100,6 +106,7 @@ self.onmessage = async (event: MessageEvent<unknown>) => {
       const pyodideBase = new URL("pyodide/", boot.assetBase);
       const pyodideModule = await import(/* @vite-ignore */ new URL("pyodide.mjs", pyodideBase).href) as typeof import("pyodide");
       pyodide = await pyodideModule.loadPyodide({ indexURL: pyodideBase.href });
+      await pyodide.loadPackage(["sqlalchemy", "typing-extensions"]);
       pyodide.globals.set("__revision_lab_query", (sql: unknown, encodedParams: unknown) => {
         const decoded: unknown = JSON.parse(String(encodedParams));
         if (!Array.isArray(decoded) || !decoded.every(isTaggedValue)) {
@@ -107,7 +114,33 @@ self.onmessage = async (event: MessageEvent<unknown>) => {
         }
         return JSON.stringify(rpc.query(String(sql), decoded as TaggedValue[]));
       });
+      pyodide.globals.set("__revision_lab_execute_many", (sql: unknown, encodedParamSets: unknown) => {
+        const decoded: unknown = JSON.parse(String(encodedParamSets));
+        if (!Array.isArray(decoded) || !decoded.every((params) => Array.isArray(params) && params.every(isTaggedValue))) {
+          return JSON.stringify({ ok: false, error: { code: "RPC_INVALID_PARAMS", message: "Invalid tagged parameter sets" } });
+        }
+        return JSON.stringify(rpc.executeMany(String(sql), decoded as TaggedValue[][]));
+      });
       pyodide.runPython(PYTHON_BRIDGE);
+      pyodide.globals.set("__revision_lab_dbapi_source", PGLITE_DBAPI_SOURCE);
+      pyodide.globals.set("__revision_lab_dialect_source", PGLITE_SQLALCHEMY_SOURCE);
+      pyodide.runPython(String.raw`
+import sys
+import types
+
+def _revision_lab_install_module(name, source, filename):
+    module = types.ModuleType(name)
+    module.__file__ = filename
+    sys.modules[name] = module
+    exec(compile(source, filename, "exec"), module.__dict__)
+    return module
+
+_pglite_dbapi = _revision_lab_install_module("pglite_dbapi", __revision_lab_dbapi_source, "pglite_dbapi.py")
+_pglite_dbapi.configure(pg_query, pg_execute_many)
+_revision_lab_install_module("pglite_sqlalchemy", __revision_lab_dialect_source, "pglite_sqlalchemy.py")
+`);
+      pyodide.globals.delete("__revision_lab_dbapi_source");
+      pyodide.globals.delete("__revision_lab_dialect_source");
       bootContext = { protocolVersion: boot.protocolVersion, workspaceId: boot.workspaceId, mode: "technical-probe" };
       send({ protocolVersion: boot.protocolVersion, requestId: boot.requestId, workspaceId: boot.workspaceId, type: "READY" });
     } catch (error) {

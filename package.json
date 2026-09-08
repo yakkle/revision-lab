@@ -12,7 +12,7 @@
     "dev": "pnpm prepare:runtime && vite",
     "prepare:runtime": "node scripts/prepare-runtime.mjs",
     "build": "pnpm prepare:runtime && tsc -b && vite build && pnpm check:static-size",
-    "build:e2e": "VITE_T2_TEST_HOOK=1 VITE_T3_TEST_HOOK=1 pnpm build",
+    "build:e2e": "VITE_T2_TEST_HOOK=1 VITE_T3_TEST_HOOK=1 VITE_T4_TEST_HOOK=1 pnpm build",
     "preview": "vite preview",
     "lint": "eslint .",
     "typecheck": "tsc -b",

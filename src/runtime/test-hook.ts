@@ -20,6 +20,11 @@ declare global {
       inspect: typeof sqliteRuntime.inspect;
       close: typeof sqliteRuntime.close;
     };
+    __revisionLabT4?: {
+      probe: typeof runtimeClient.runDbapiProbe;
+      restart: typeof runtimeClient.restart;
+      close: typeof runtimeClient.close;
+    };
   }
 }
 
@@ -39,6 +44,14 @@ if (import.meta.env.VITE_T2_TEST_HOOK === "1") {
   window.__revisionLabT2 = {
     query: runtimeClient.query.bind(runtimeClient),
     probe: runtimeClient.runTechnicalProbe.bind(runtimeClient),
+    restart: runtimeClient.restart.bind(runtimeClient),
+    close: runtimeClient.close.bind(runtimeClient),
+  };
+}
+
+if (import.meta.env.VITE_T4_TEST_HOOK === "1") {
+  window.__revisionLabT4 = {
+    probe: runtimeClient.runDbapiProbe.bind(runtimeClient),
     restart: runtimeClient.restart.bind(runtimeClient),
     close: runtimeClient.close.bind(runtimeClient),
   };

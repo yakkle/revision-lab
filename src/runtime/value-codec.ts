@@ -1,6 +1,6 @@
 import type { TaggedValue } from "./protocol";
 
-const OID = { bytea: 17, int8: 20, date: 1082, time: 1083, timestamp: 1114, timestampTz: 1184, timeTz: 1266, numeric: 1700 };
+const OID = { bytea: 17, int8: 20, int2Vector: 22, date: 1082, time: 1083, timestamp: 1114, timestampTz: 1184, timeTz: 1266, numeric: 1700 };
 
 function toBase64(value: Uint8Array): string {
   let binary = "";
@@ -19,6 +19,9 @@ export function encodeValue(value: unknown, dataTypeId?: number): TaggedValue {
   if (value === null || value === undefined) return { tag: "null" };
   if (Array.isArray(value)) return { tag: "array", value: value.map((item) => encodeValue(item)) };
   if (value instanceof Uint8Array) return { tag: "bytea", value: toBase64(value) };
+  if (dataTypeId === OID.int2Vector && typeof value === "string") {
+    return { tag: "array", value: value.trim() === "" ? [] : value.trim().split(/\s+/).map((item) => ({ tag: "number", value: Number(item) })) };
+  }
   if (dataTypeId === OID.int8) return { tag: "bigint", value: String(value) };
   if (dataTypeId === OID.numeric) return { tag: "decimal", value: String(value) };
   if (dataTypeId === OID.date) return { tag: "date", value: value instanceof Date ? value.toISOString().slice(0, 10) : String(value), dataTypeId };

@@ -13,4 +13,11 @@ describe("tagged PostgreSQL value codec", () => {
   it("rejects unsafe untagged JavaScript integers", () => {
     expect(() => encodeValue(Number.MAX_SAFE_INTEGER + 1)).toThrow("UNSUPPORTED_VALUE_TYPE");
   });
+
+  it("normalizes PostgreSQL int2vector values for SQLAlchemy reflection", () => {
+    expect(encodeValue("0 3", 22)).toEqual({
+      tag: "array",
+      value: [{ tag: "number", value: 0 }, { tag: "number", value: 3 }],
+    });
+  });
 });
