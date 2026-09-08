@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  CONTROL_BYTES, PROTOCOL_VERSION, RESPONSE_BYTES, isPgQuery, isSqliteRuntimeRequest, isTaggedValue, isWorkerBoot,
+  CONTROL_BYTES, PROTOCOL_VERSION, RESPONSE_BYTES, isPGliteReconnect, isPgQuery, isSqliteRuntimeRequest,
+  isTaggedValue, isWorkerBoot,
 } from "./protocol";
 
 describe("runtime protocol validation", () => {
@@ -29,6 +30,22 @@ describe("runtime protocol validation", () => {
       response: new SharedArrayBuffer(RESPONSE_BYTES),
       assetBase: location.href,
     })).toBe(false);
+    channel.port1.close();
+    channel.port2.close();
+  });
+
+  it("validates a PGlite reconnect with fresh RPC buffers", () => {
+    const channel = new MessageChannel();
+    expect(isPGliteReconnect({
+      protocolVersion: PROTOCOL_VERSION,
+      requestId: "request-2",
+      workspaceId: "workspace_1",
+      type: "RECONNECT_PGLITE",
+      port: channel.port1,
+      control: new SharedArrayBuffer(CONTROL_BYTES),
+      response: new SharedArrayBuffer(RESPONSE_BYTES),
+      assetBase: location.href,
+    })).toBe(true);
     channel.port1.close();
     channel.port2.close();
   });

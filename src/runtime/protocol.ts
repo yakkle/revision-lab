@@ -29,6 +29,13 @@ export type WorkerBoot = Envelope & {
   response: SharedArrayBuffer;
   assetBase: string;
 };
+export type PGliteReconnect = Envelope & {
+  type: "RECONNECT_PGLITE";
+  port: MessagePort;
+  control: SharedArrayBuffer;
+  response: SharedArrayBuffer;
+  assetBase: string;
+};
 export type SqliteWorkerBoot = Envelope & {
   type: "BOOT_SQLITE";
   assetBase: string;
@@ -142,6 +149,17 @@ export function isPgQuery(value: unknown): value is PgQuery {
 
 export function isWorkerBoot(value: unknown): value is WorkerBoot {
   if (!isEnvelope(value) || !isRecord(value) || value.type !== "BOOT") return false;
+  try {
+    return value.port instanceof MessagePort && value.control instanceof SharedArrayBuffer && value.control.byteLength === CONTROL_BYTES &&
+      value.response instanceof SharedArrayBuffer && value.response.byteLength === RESPONSE_BYTES &&
+      typeof value.assetBase === "string" && new URL(value.assetBase).origin === location.origin;
+  } catch {
+    return false;
+  }
+}
+
+export function isPGliteReconnect(value: unknown): value is PGliteReconnect {
+  if (!isEnvelope(value) || !isRecord(value) || value.type !== "RECONNECT_PGLITE") return false;
   try {
     return value.port instanceof MessagePort && value.control instanceof SharedArrayBuffer && value.control.byteLength === CONTROL_BYTES &&
       value.response instanceof SharedArrayBuffer && value.response.byteLength === RESPONSE_BYTES &&

@@ -1,10 +1,19 @@
 /// <reference lib="webworker" />
 import { PGlite } from "@electric-sql/pglite";
-import { CONTROL, STATE, isPgQuery, isWorkerBoot, rpcError, type PgResult, type RpcFault } from "./protocol";
+import {
+  CONTROL, STATE, isPGliteReconnect, isPgQuery, isWorkerBoot, rpcError,
+  type PGliteReconnect, type PgResult, type RpcFault, type WorkerBoot,
+} from "./protocol";
 import { publishResponse } from "./sync-rpc";
 import { decodeValue, encodeValue } from "./value-codec";
 
 declare const self: DedicatedWorkerGlobalScope;
+
+type PGliteConnection = WorkerBoot | PGliteReconnect;
+
+let database: PGlite | undefined;
+let workspaceId: string | undefined;
+let activePort: MessagePort | undefined;
 
 function textProperty(value: unknown, key: string): string | undefined {
   if (typeof value !== "object" || value === null || !(key in value)) return undefined;
@@ -23,7 +32,76 @@ function databaseFault(error: unknown): RpcFault {
   };
 }
 
+function attachConnection(connection: PGliteConnection): void {
+  if (!database) throw new Error("PGlite is not initialized");
+  const control = new Int32Array(connection.control);
+  const response = new Uint8Array(connection.response);
+  activePort?.close();
+  activePort = connection.port;
+  activePort.onmessage = async (requestEvent: MessageEvent<unknown>) => {
+    const request = requestEvent.data;
+    if (!isPgQuery(request)) {
+      publishResponse(control, response, Atomics.load(control, CONTROL.REQUEST_SEQUENCE), rpcError("RPC_INVALID_REQUEST"));
+      return;
+    }
+    if (request.workspaceId !== connection.workspaceId || request.protocolVersion !== connection.protocolVersion) {
+      publishResponse(control, response, request.sequence, rpcError("RPC_PROTOCOL_ERROR"));
+      return;
+    }
+    if (request.sequence !== Atomics.load(control, CONTROL.REQUEST_SEQUENCE)) {
+      publishResponse(control, response, request.sequence, rpcError("RPC_PROTOCOL_ERROR", "Request sequence mismatch"));
+      return;
+    }
+
+    let result: PgResult;
+    try {
+      const queryResult = await database!.query<unknown[]>(request.sql, request.params.map(decodeValue), { rowMode: "array" });
+      const fields = queryResult.fields.map((field) => ({ name: field.name, dataTypeId: field.dataTypeID }));
+      result = {
+        ok: true,
+        rows: queryResult.rows.map((row) => row.map((value, index) => encodeValue(value, fields[index]?.dataTypeId))),
+        fields,
+        rowCount: queryResult.rowCount ?? queryResult.affectedRows ?? queryResult.rows.length,
+        commandTag: queryResult.command,
+      };
+    } catch (error) {
+      const fault = error instanceof Error && error.message === "UNSUPPORTED_VALUE_TYPE"
+        ? { code: "UNSUPPORTED_VALUE_TYPE", message: error.message }
+        : databaseFault(error);
+      result = { ok: false, error: fault };
+    }
+    publishResponse(control, response, request.sequence, result);
+  };
+  activePort.start();
+}
+
+function ready(connection: PGliteConnection): void {
+  self.postMessage({
+    protocolVersion: connection.protocolVersion,
+    requestId: connection.requestId,
+    workspaceId: connection.workspaceId,
+    type: "READY",
+  });
+}
+
 self.onmessage = async (event: MessageEvent<unknown>) => {
+  if (isPGliteReconnect(event.data)) {
+    const connection = event.data;
+    if (!database || workspaceId !== connection.workspaceId) {
+      self.postMessage({
+        protocolVersion: connection.protocolVersion,
+        requestId: connection.requestId,
+        workspaceId: connection.workspaceId,
+        type: "ERROR",
+        error: { code: "PGLITE_RECONNECT_FAILED", message: "PGlite Worker has no matching database" },
+      });
+      return;
+    }
+    attachConnection(connection);
+    ready(connection);
+    return;
+  }
+
   if (!isWorkerBoot(event.data)) {
     self.postMessage({ type: "ERROR", error: { code: "RPC_INVALID_BOOT", message: "Invalid PGlite Worker boot message" } });
     return;
@@ -31,7 +109,6 @@ self.onmessage = async (event: MessageEvent<unknown>) => {
 
   const boot = event.data;
   const control = new Int32Array(boot.control);
-  const response = new Uint8Array(boot.response);
   try {
     const runtimeBase = new URL("pglite/", boot.assetBase);
     const [pgliteWasmModule, initdbWasmModule, fsBundle] = await Promise.all([
@@ -42,45 +119,11 @@ self.onmessage = async (event: MessageEvent<unknown>) => {
         return result.blob();
       }),
     ]);
-    const database = new PGlite({ dataDir: "memory://", pgliteWasmModule, initdbWasmModule, fsBundle });
+    database = new PGlite({ dataDir: "memory://", pgliteWasmModule, initdbWasmModule, fsBundle });
     await database.waitReady;
-
-    boot.port.onmessage = async (requestEvent: MessageEvent<unknown>) => {
-      const request = requestEvent.data;
-      if (!isPgQuery(request)) {
-        publishResponse(control, response, Atomics.load(control, CONTROL.REQUEST_SEQUENCE), rpcError("RPC_INVALID_REQUEST"));
-        return;
-      }
-      if (request.workspaceId !== boot.workspaceId || request.protocolVersion !== boot.protocolVersion) {
-        publishResponse(control, response, request.sequence, rpcError("RPC_PROTOCOL_ERROR"));
-        return;
-      }
-      if (request.sequence !== Atomics.load(control, CONTROL.REQUEST_SEQUENCE)) {
-        publishResponse(control, response, request.sequence, rpcError("RPC_PROTOCOL_ERROR", "Request sequence mismatch"));
-        return;
-      }
-
-      let result: PgResult;
-      try {
-        const queryResult = await database.query<unknown[]>(request.sql, request.params.map(decodeValue), { rowMode: "array" });
-        const fields = queryResult.fields.map((field) => ({ name: field.name, dataTypeId: field.dataTypeID }));
-        result = {
-          ok: true,
-          rows: queryResult.rows.map((row) => row.map((value, index) => encodeValue(value, fields[index]?.dataTypeId))),
-          fields,
-          rowCount: queryResult.rowCount ?? queryResult.affectedRows ?? queryResult.rows.length,
-          commandTag: queryResult.command,
-        };
-      } catch (error) {
-        const fault = error instanceof Error && error.message === "UNSUPPORTED_VALUE_TYPE"
-          ? { code: "UNSUPPORTED_VALUE_TYPE", message: error.message }
-          : databaseFault(error);
-        result = { ok: false, error: fault };
-      }
-      publishResponse(control, response, request.sequence, result);
-    };
-    boot.port.start();
-    self.postMessage({ ...boot, port: undefined, control: undefined, response: undefined, type: "READY" });
+    workspaceId = boot.workspaceId;
+    attachConnection(boot);
+    ready(boot);
   } catch (error) {
     Atomics.store(control, CONTROL.STATE, STATE.BROKEN);
     Atomics.notify(control, CONTROL.STATE);

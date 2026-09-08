@@ -24,7 +24,23 @@ test("bounds oversized responses and remains usable", async ({ page }) => {
   expect(healthy).toMatchObject({ ok: true, rowCount: 1 });
 });
 
-test("returns a 15 second timeout and restarts both Workers", async ({ page }) => {
+test("reconnects an idle runtime without recreating PGlite", async ({ page }) => {
+  test.setTimeout(90_000);
+  const beforeRestart = await page.evaluate(async () => {
+    await window.__revisionLabT2!.query("CREATE TABLE reconnect_items (id integer PRIMARY KEY, label text NOT NULL)");
+    return window.__revisionLabT2!.query("INSERT INTO reconnect_items (id, label) VALUES ($1, $2)", [1, "preserved"]);
+  });
+  expect(beforeRestart).toMatchObject({ ok: true, rowCount: 1 });
+  await page.evaluate(() => window.__revisionLabT2!.restart());
+  const afterRestart = await page.evaluate(() => window.__revisionLabT2!.query("SELECT id, label FROM reconnect_items"));
+  expect(afterRestart).toMatchObject({
+    ok: true,
+    rowCount: 1,
+    rows: [[{ tag: "number", value: 1 }, { tag: "string", value: "preserved" }]],
+  });
+});
+
+test("returns a 15 second timeout and reconnects through the existing PGlite Worker", async ({ page }) => {
   test.setTimeout(120_000);
   const timedOut = await page.evaluate(() => window.__revisionLabT2!.query("SELECT pg_sleep(16)"));
   expect(timedOut).toMatchObject({ ok: false, error: { code: "RPC_TIMEOUT" } });

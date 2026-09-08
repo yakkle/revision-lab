@@ -40,6 +40,7 @@ flowchart LR
 - React 렌더링과 사용자 입력만 담당한다.
 - Runtime client가 request ID, workspace ID, protocol version을 부여한다.
 - Pyodide Worker와 PGlite Worker를 생성하고 `MessageChannel`의 양쪽 port를 전달한다.
+- RPC connection이 broken 상태가 되면 PGlite instance는 유지하고 새 Pyodide Worker, `MessageChannel`, SharedArrayBuffer로 재연결한다.
 - runtime snapshot을 표시하지만 파일·revision·DB 상태의 진실 공급원이 되지 않는다.
 - UI가 임의로 성공 상태를 추정하지 않고 Worker가 반환한 snapshot만 반영한다.
 
@@ -54,6 +55,7 @@ flowchart LR
 ### 2.3 PGlite Worker
 
 - workspace별 하나의 PGlite instance를 `idb://revision-lab/<workspace-id>`에 연다.
+- 같은 workspace의 `RECONNECT_PGLITE` 메시지로 새 RPC port와 buffer를 받아 기존 PGlite instance를 재사용한다.
 - SQL 실행과 DB dump/restore/reset만 담당한다.
 - Alembic 파일, lesson 상태, UI 상태를 알지 못한다.
 - 동시에 하나의 RPC만 처리한다. 순서를 보장하지 못하는 요청은 `RPC_BUSY`로 거절한다.
@@ -159,7 +161,8 @@ Tagged JSON codec은 다음 값을 손실 없이 처리한다.
 - 개별 RPC timeout은 15초다.
 - 전체 Alembic 명령 timeout은 30초다.
 - timeout 이후 해당 DBAPI connection을 broken 상태로 표시하고 추가 query를 거절한다.
-- Main thread는 두 Worker를 종료하고 마지막 성공 체크포인트에서 workspace를 복원한다.
+- Main thread는 Pyodide Worker를 종료한 뒤 기존 PGlite Worker에 새 RPC port와 buffer를 연결한다.
+- PGlite Worker 자체가 crash한 경우에만 Worker를 새로 만들고 마지막 성공 체크포인트에서 workspace를 복원한다.
 - checkpoint가 없으면 빈 workspace로 돌아가지 않고 복구 불가 오류와 reset 선택지를 표시한다.
 
 ## 5. Python DBAPI와 PostgreSQL dialect
