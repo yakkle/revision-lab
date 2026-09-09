@@ -1,6 +1,14 @@
 /*
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: require-corp
+  Cross-Origin-Resource-Policy: same-origin
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
 
+# WebKit can reject reused Worker/module responses under COEP.
+# Keep large WASM/data/wheel assets eligible for normal browser caching.
+/*.js
+  Cache-Control: no-store
+
+/*.mjs
+  Cache-Control: no-store

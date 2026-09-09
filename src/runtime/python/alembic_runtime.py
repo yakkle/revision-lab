@@ -7,13 +7,18 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import re
+import shlex
+import base64
+import datetime
+import decimal
+import uuid
 import traceback
 from typing import Any
 
 from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import create_engine, inspect, MetaData, Table, select
 
 
 WORKSPACES = Path("/workspaces")
@@ -167,6 +172,7 @@ def _revision_graph(root: Path, current: set[str]) -> list[dict[str, Any]]:
         depends_on = list(dependencies) if isinstance(dependencies, tuple) else ([] if dependencies is None else [dependencies])
         nodes.append({
             "revision": revision.revision,
+            "path": Path(revision.path).resolve().relative_to(root.resolve()).as_posix(),
             "downRevisions": down_revisions,
             "branchLabels": sorted(revision.branch_labels or []),
             "dependsOn": depends_on,
@@ -323,7 +329,7 @@ def _parse_options(
                 raise RuntimeRequestError("INVALID_ALEMBIC_OPTIONS", f"Option {item} may only be supplied once")
             options[destination] = True
             index += 1
-        elif item.startswith("-"):
+        elif item.startswith("-") and not re.fullmatch(r"-\d+", item):
             raise RuntimeRequestError("UNSUPPORTED_ALEMBIC_OPTION", f"Unsupported Alembic option: {item}")
         else:
             positionals.append(item)
@@ -486,6 +492,60 @@ def _run_alembic(root: Path, argv: list[str]) -> dict[str, Any]:
     return result
 
 
+def _data_tag(value):
+    if value is None:
+        return {"tag": "null"}
+    if isinstance(value, bool):
+        return {"tag": "boolean", "value": value}
+    if isinstance(value, int):
+        return {"tag": "bigint", "value": str(value)} if abs(value) > 9007199254740991 else {"tag": "number", "value": value}
+    if isinstance(value, float):
+        if value != value:
+            return {"tag": "special-number", "value": "NaN"}
+        if abs(value) == float("inf"):
+            return {"tag": "special-number", "value": "Infinity" if value > 0 else "-Infinity"}
+        return {"tag": "number", "value": value}
+    if isinstance(value, str):
+        return {"tag": "string", "value": value}
+    if isinstance(value, decimal.Decimal):
+        return {"tag": "decimal", "value": str(value)}
+    if isinstance(value, uuid.UUID):
+        return {"tag": "string", "value": str(value)}
+    if isinstance(value, (bytes, memoryview)):
+        return {"tag": "bytea", "value": base64.b64encode(value).decode("ascii")}
+    if isinstance(value, datetime.datetime):
+        return {"tag": "timestamp", "value": value.isoformat(), "dataTypeId": 1184 if value.tzinfo else 1114}
+    if isinstance(value, datetime.date):
+        return {"tag": "date", "value": value.isoformat(), "dataTypeId": 1082}
+    if isinstance(value, datetime.time):
+        return {"tag": "time", "value": value.isoformat(), "dataTypeId": 1083}
+    if isinstance(value, (list, tuple)):
+        return {"tag": "array", "value": [_data_tag(item) for item in value]}
+    # JSON objects are explicitly encoded JSON text, never implicit repr().
+    if isinstance(value, dict):
+        return {"tag": "string", "value": json.dumps(value, ensure_ascii=False, allow_nan=False)}
+    raise RuntimeRequestError("UNSUPPORTED_VALUE_TYPE", f"Cannot preview value of type {type(value).__name__}")
+
+
+def _read_table(root: Path, name: str):
+    engine = create_engine(_database_url(root))
+    try:
+        with engine.connect() as connection:
+            if name not in inspect(connection).get_table_names():
+                raise RuntimeRequestError("TABLE_NOT_FOUND", f"Table does not exist: {name}")
+            table = Table(name, MetaData(), autoload_with=connection)
+            statement = select(table).limit(51)
+            if list(table.primary_key.columns):
+                statement = statement.order_by(*table.primary_key.columns)
+            rows = connection.execute(statement).fetchall()
+            data = {"table": name, "columns": list(table.columns.keys()), "rows": [[_data_tag(cell) for cell in row] for row in rows[:50]], "truncated": len(rows) > 50}
+            if len(json.dumps(data).encode("utf-8")) > 1024 * 1024:
+                raise RuntimeRequestError("DATA_PREVIEW_TOO_LARGE", "Data preview exceeds 1 MiB")
+            return data
+    finally:
+        engine.dispose()
+
+
 def handle(request_json: str) -> str:
     request = json.loads(request_json)
     workspace_id = request.get("workspaceId")
@@ -496,6 +556,22 @@ def handle(request_json: str) -> str:
         return json.dumps({"type": "WORKSPACE_CREATED", "state": _create_workspace(root)})
     if not root.exists():
         raise RuntimeRequestError("WORKSPACE_NOT_FOUND", "Create the workspace before using it")
+    if request_type == "READ_TABLE":
+        return json.dumps({"type": "TABLE_DATA", "data": _read_table(root, request["table"])})
+    if request_type == "RUN_COMMAND":
+        try:
+            source = request["command"]
+            if any(token in source for token in ("|", ">", "<", ";", "`", "$(", "&&", "\n", "\r")):
+                raise RuntimeRequestError("UNSUPPORTED_SHELL_SYNTAX", "Shell operators and command substitution are not supported")
+            argv = shlex.split(source)
+        except ValueError as error:
+            raise RuntimeRequestError("INVALID_ALEMBIC_ARGUMENTS", str(error)) from error
+        if not argv or argv[0] != "alembic":
+            raise RuntimeRequestError("UNSUPPORTED_ALEMBIC_COMMAND", "Commands must start with alembic")
+        argv = argv[1:]
+        if len(argv) > 64 or any(len(item) > 4096 for item in argv):
+            raise RuntimeRequestError("INVALID_ALEMBIC_ARGUMENTS", "Command arguments exceed runtime limits")
+        return json.dumps({"type": "COMMAND_RESULT", "result": _run_alembic(root, argv)})
     if request_type == "RUN_ALEMBIC":
         argv = request.get("argv")
         if not isinstance(argv, list) or not argv or not all(isinstance(item, str) for item in argv):

@@ -34,6 +34,7 @@ Revision Lab은 Alembic을 어렵게 느끼는 Python 백엔드 개발자가 브
 - [핵심 개념과 학습 모델](docs/CONCEPTS.md)
 - [기술 명세](docs/SPEC.md)
 - [T5 PostgreSQL Alembic 기능 동등성 검증](docs/T5.md)
+- [T6 Lab UI 작업 기록](docs/T6.md)
 
 - [에이전트 작업 규칙](AGENTS.md)
 
@@ -74,4 +75,16 @@ pnpm test:e2e
 
 배포 환경별 격리 헤더와 PostgreSQL capability 차이는 [배포 환경](docs/DEPLOYMENT.md)을 참고한다.
 
-현재 두 DB 모드의 Alembic 실행·schema 조회 API까지 구현되어 있다. 시작 화면은 capability 진단 화면이며, 편집기·터미널·revision graph를 갖춘 Lab UI는 T6에서 연결한다.
+현재 두 DB 모드의 실제 Alembic 실행기를 편집기·터미널·revision graph·schema/data·diff·로그 패널에 연결했다.
+
+## Lab 사용
+
+1. DB 환경을 선택하고 **새 workspace 만들기**를 누른다.
+2. 터미널에서 `alembic init migrations`를 실행한다.
+3. `alembic revision -m "create users"`로 파일을 생성하고, 편집기에서 `upgrade()`와 `downgrade()`를 작성해 저장한다.
+4. `alembic upgrade head`를 실행한 뒤 Schema / Data와 Diff에서 실제 변경을 확인한다. 테이블을 선택하면 최대 50행의 데이터를 읽는다.
+5. `alembic downgrade -1`로 되돌리거나, `models.py` 편집 후 `alembic revision --autogenerate -m "update models"`로 변경 후보를 만든다.
+
+Graph 노드와 DB current revision을 선택하면 해당 migration 파일이 열린다. Ctrl/⌘+S로 파일을 저장하고, 터미널의 위·아래 방향키로 명령 기록을 불러올 수 있다. 원본 오류와 학습 설명은 별도 패널에서 확인한다.
+
+동시에 최대 4개 workspace를 유지한다. 현재 파일·DB·편집 내용은 탭 메모리에만 있으므로 새로고침하면 사라진다. 초기화는 확인 후 선택된 workspace만 삭제한다. 체크포인트 복원은 T8에서 구현한다.

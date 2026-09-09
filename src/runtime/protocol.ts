@@ -48,6 +48,7 @@ export type DatabaseMode = "sqlite" | "postgresql";
 export type FileChange = { path: string; change: "added" | "modified" | "deleted" };
 export type RevisionNode = {
   revision: string;
+  path?: string;
   downRevisions: string[];
   branchLabels: string[];
   dependsOn: string[];
@@ -74,6 +75,7 @@ export type TableSnapshot = {
 };
 export type SchemaSnapshot = { dialect: DatabaseMode; tables: TableSnapshot[]; alembicVersion: string[] };
 export type WorkspaceState = { files: string[]; revisions: RevisionNode[]; schema: SchemaSnapshot };
+export type TableData = { table: string; columns: string[]; rows: TaggedValue[][]; truncated: boolean };
 export type SchemaObjectKind = "table" | "column" | "primaryKey" | "foreignKey" | "uniqueConstraint" | "checkConstraint" | "index";
 export type SchemaChange = {
   kind: SchemaObjectKind;
@@ -97,6 +99,8 @@ export type CommandResult = {
   after: WorkspaceState;
 };
 export type SqliteRuntimeRequest = Envelope & (
+  | { type: "RUN_COMMAND"; command: string }
+  | { type: "READ_TABLE"; table: string }
   | { type: "CREATE_WORKSPACE" }
   | { type: "RUN_ALEMBIC"; argv: string[] }
   | { type: "READ_FILE"; path: string }
@@ -104,6 +108,8 @@ export type SqliteRuntimeRequest = Envelope & (
   | { type: "INSPECT" }
 );
 export type SqliteRuntimeReply = Envelope & (
+  | { type: "PROGRESS"; message: string }
+  | { type: "TABLE_DATA"; data: TableData }
   | { type: "READY" }
   | { type: "WORKSPACE_CREATED"; state: WorkspaceState }
   | { type: "COMMAND_RESULT"; result: CommandResult }
@@ -196,6 +202,8 @@ export function isSqliteWorkerBoot(value: unknown): value is SqliteWorkerBoot {
 
 export function isSqliteRuntimeRequest(value: unknown): value is SqliteRuntimeRequest {
   if (!isEnvelope(value) || !isRecord(value)) return false;
+  if (value.type === "RUN_COMMAND") return typeof value.command === "string" && value.command.trim().length > 0 && value.command.length <= 8192;
+  if (value.type === "READ_TABLE") return typeof value.table === "string" && value.table.length > 0 && value.table.length <= 512;
   const validPath = (path: unknown) => typeof path === "string" && path.length > 0 && path.length <= 512 &&
     !path.startsWith("/") && !path.split("/").some((part) => part === "" || part === "." || part === "..");
   if (value.type === "CREATE_WORKSPACE" || value.type === "INSPECT") return true;
@@ -219,6 +227,7 @@ function isFileChanges(value: unknown): value is FileChange[] {
 
 function isRevisionNode(value: unknown): value is RevisionNode {
   return isRecord(value) && typeof value.revision === "string" && isStringArray(value.downRevisions) &&
+    (value.path === undefined || typeof value.path === "string") &&
     isStringArray(value.branchLabels) && isStringArray(value.dependsOn) && typeof value.isHead === "boolean" &&
     typeof value.isBranchPoint === "boolean" && typeof value.isMergePoint === "boolean" && typeof value.isCurrent === "boolean";
 }
@@ -250,6 +259,10 @@ function isSchemaDiff(value: unknown): value is SchemaDiff {
 
 export function isSqliteRuntimeReply(value: unknown): value is SqliteRuntimeReply {
   if (!isEnvelope(value) || !isRecord(value)) return false;
+  if (value.type === "PROGRESS") return typeof value.message === "string";
+  if (value.type === "TABLE_DATA") return isRecord(value.data) && typeof value.data.table === "string" &&
+    isStringArray(value.data.columns) && typeof value.data.truncated === "boolean" && Array.isArray(value.data.rows) &&
+    value.data.rows.every((row) => Array.isArray(row) && row.length === (value.data as TableData).columns.length && row.every(isTaggedValue));
   if (value.type === "READY") return true;
   if (value.type === "ERROR") return isRecord(value.error) && typeof value.error.code === "string" && typeof value.error.message === "string";
   if (value.type === "WORKSPACE_CREATED" || value.type === "STATE_SNAPSHOT") return isWorkspaceState(value.state);

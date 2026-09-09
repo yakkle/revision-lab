@@ -5,6 +5,19 @@ import {
 } from "./protocol";
 
 describe("runtime protocol validation", () => {
+  it("validates command text, progress and bounded tagged table rows", () => {
+    const envelope = { protocolVersion: 1, requestId: "ui-1", workspaceId: "lab_1" };
+    expect(isSqliteRuntimeRequest({ ...envelope, type: "RUN_COMMAND", command: "alembic heads" })).toBe(true);
+    expect(isSqliteRuntimeRequest({ ...envelope, type: "RUN_COMMAND", command: " " })).toBe(false);
+    expect(isSqliteRuntimeRequest({ ...envelope, type: "RUN_COMMAND", command: "x".repeat(8193) })).toBe(false);
+    expect(isSqliteRuntimeRequest({ ...envelope, type: "READ_TABLE", table: "users" })).toBe(true);
+    expect(isSqliteRuntimeRequest({ ...envelope, type: "READ_TABLE", table: 1 })).toBe(false);
+    expect(isAlembicRuntimeReply({ ...envelope, type: "PROGRESS", message: "loading" })).toBe(true);
+    const data = { table: "users", columns: ["id"], rows: [[{ tag: "bigint", value: "9007199254740993" }]], truncated: false };
+    expect(isAlembicRuntimeReply({ ...envelope, type: "TABLE_DATA", data })).toBe(true);
+    expect(isAlembicRuntimeReply({ ...envelope, type: "TABLE_DATA", data: { ...data, rows: [[{ tag: "number", value: 9007199254740992 }]] } })).toBe(false);
+    expect(isAlembicRuntimeReply({ ...envelope, type: "TABLE_DATA", data: { ...data, columns: [] } })).toBe(false);
+  });
   it("accepts both database snapshots and rejects an unknown dialect", () => {
     const envelope = { protocolVersion: PROTOCOL_VERSION, requestId: "snapshot-1", workspaceId: "lab_1", type: "STATE_SNAPSHOT" };
     for (const dialect of ["sqlite", "postgresql", "mysql"]) {

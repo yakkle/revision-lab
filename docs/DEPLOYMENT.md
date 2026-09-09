@@ -23,6 +23,9 @@ Vite preview는 다음 헤더를 제공한다.
 
 - `Cross-Origin-Opener-Policy: same-origin`
 - `Cross-Origin-Embedder-Policy: require-corp`
+- `Cross-Origin-Resource-Policy: same-origin`
+
+JS/MJS 모듈은 `Cache-Control: no-store`로 제공한다. WebKit 테스트에서 캐시된 Worker·모듈 응답이 COEP로 차단되면서 두 번째 workspace 생성이나 초기화가 실패하는 것을 확인했다. WASM/data/wheel 파일에는 이 캐시 제한을 적용하지 않는다. Vite 개발 서버는 모든 응답에 `no-store`를 사용한다.
 
 브라우저 console에서 `crossOriginIsolated === true`인지 확인한다. PostgreSQL capability는 이 조건에서만 활성화된다.
 
@@ -54,6 +57,6 @@ Cloudflare Pages는 `public/_headers`가 build 결과의 `_headers`로 복사되
 2. `crossOriginIsolated === true`다.
 3. PostgreSQL capability가 활성화된다.
 4. 모든 정적 파일이 25MiB 미만이다.
+5. JS/MJS 응답에 `Cache-Control: no-store`가 적용되고, 동일 탭에서 workspace를 두 번 생성하거나 초기화해도 Worker가 정상 동작한다. `public/_headers`의 `/*.js`, `/*.mjs` 규칙이 이 정책을 정의한다.
 
 실제 GitHub 또는 Cloudflare 프로젝트 생성과 배포는 별도 명시적 승인 후 수행한다.
-

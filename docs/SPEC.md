@@ -77,6 +77,8 @@ type RuntimeRequest = ProtocolEnvelope & (
   | { type: "BOOT" }
   | { type: "CREATE_WORKSPACE"; mode: DatabaseMode }
   | { type: "RUN_ALEMBIC"; argv: string[] }
+  | { type: "RUN_COMMAND"; command: string }
+  | { type: "READ_TABLE"; table: string }
   | { type: "READ_FILE"; path: string }
   | { type: "WRITE_FILE"; path: string; content: string }
   | { type: "INSPECT" }
@@ -220,6 +222,7 @@ type SchemaSnapshot = {
 
 type RevisionNode = {
   revision: string;
+  path?: string; // ScriptDirectory가 반환한 workspace 상대 경로
   downRevisions: string[];
   branchLabels: string[];
   isHead: boolean;
@@ -252,6 +255,7 @@ Cloudflare Pages의 정적 `_headers`에 최소 다음 정책을 둔다.
 /*
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: require-corp
+  Cross-Origin-Resource-Policy: same-origin
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
 ```
@@ -265,6 +269,23 @@ Cloudflare Pages의 정적 `_headers`에 최소 다음 정책을 둔다.
 
 ## 9. T5 구현 범위와 후속 작업
 
-- 두 모드의 Alembic online 명령, revision graph, schema snapshot/diff API와 브라우저 통합 테스트가 구현되어 있다. 결과를 탐색하는 Lab UI는 T6, lesson validator와 Alice/Bob workspace 복제·통합은 T7에서 연결한다.
+- 두 모드의 Alembic online 명령, revision graph, schema snapshot/diff API와 브라우저 통합 테스트가 구현되어 있다. 결과를 탐색하는 Lab UI는 T6에서 연결했으며, lesson validator와 Alice/Bob workspace 복제·통합은 T7에서 연결한다.
 - 현재 PGlite instance는 기존 기술 검증과 동일하게 `memory://`를 사용한다. 2.3절의 IndexedDB 데이터 디렉터리 및 checkpoint 저장·복원은 T8에서 완성한다.
 - T2 기술 검증 client의 PGlite 재연결 기능은 유지된다. 공통 Alembic client에는 아직 파일·DB를 함께 복구하는 경로가 없다. 전체 명령 timeout 또는 Worker crash에서는 실행기를 종료하고 후속 요청을 거절하며, 빈 workspace를 자동 생성하지 않는다. 4.3절의 통합 복구는 T8의 완료 조건이다.
+
+## 10. T6 Lab UI 계약
+
+- 화면의 workspace마다 독립 `AlembicRuntimeClient`를 생성한다. 메모리 사용을 제한하기 위해 동시에 최대 4개를 유지한다. 선택 전환은 기존 파일·DB·편집 초안을 유지한다.
+- Zustand store는 Worker 응답의 snapshot을 표시용으로 보관하며, 선택 파일·revision·테이블·패널과 편집 초안·실행 상태를 관리한다. 성공, graph 또는 DB 상태를 합성하지 않는다.
+- CodeMirror 6에서 Python, SQL, INI 파일을 편집한다. 저장 버튼 또는 Ctrl/⌘+S로 저장한다. 저장하지 않은 초안은 파일 및 workspace 전환에도 유지되며, 초안이 있으면 명령 실행을 차단한다.
+- `RUN_COMMAND`는 `alembic`으로 시작하는 문자열을 Python `shlex`로 분리해 기존 Command API allowlist로 전달한다. shell 연산자 및 명령 치환 문자는 실행 전에 거절한다. 상대 revision `downgrade -1`도 지원한다.
+- `PROGRESS`는 초기화·요청 처리 단계를 전달하는 비종결 응답이다. client는 이 메시지로 pending 요청을 완료하거나 실행 잠금을 해제하지 않는다. 진행률을 추정한 백분율은 표시하지 않는다.
+- `RevisionNode.path`는 `ScriptDirectory`의 실제 revision 경로다. graph 노드, 파일 선택, DB current revision 링크가 이 경로로 연결된다. 파일 head와 DB current를 분리하며 branch/merge와 `depends_on` edge도 표시한다.
+- `READ_TABLE`은 Inspector가 확인한 테이블만 SQLAlchemy로 읽고 `TABLE_DATA`를 반환한다. 임의 SQL 실행 API가 아니다. 최대 50행과 `truncated`를 반환하며 PK가 있으면 PK 순서, 없으면 DB 반환 순서를 사용한다. 직렬화된 데이터는 최대 1 MiB다.
+- `TABLE_DATA`는 `{ table, columns, rows: TaggedValue[][], truncated }`다. 큰 정수·Decimal·시간·binary·array를 명시적으로 태그하고, UUID 및 JSON 객체는 명시적인 문자열 표현을 사용한다. 변환할 수 없는 값은 `UNSUPPORTED_VALUE_TYPE`으로 실패한다.
+- schema 패널은 컬럼·원본 타입·PK/FK/unique/check/index, 별도의 실제 `alembic_version`을 표시한다. diff 패널은 마지막 파일 변경 목록과 마지막 명령의 schema 전후 상세를 표시한다. 파일의 줄 단위 diff는 T6 범위에 포함하지 않는다.
+- 터미널과 로그 패널은 최근 100개 명령의 실제 stdout/stderr/traceback을 보관한다. 학습 설명은 별도 영역에 표시하며 T7 lesson validator를 대체하지 않는다.
+- 실행 중에는 중복 명령·저장·workspace 전환을 차단한다. 패널 전환과 명령 입력은 계속 가능하다. 탭은 방향키/Home/End, graph는 동등한 키보드 revision 목록, 편집기는 Tab 이탈을 지원한다. 850px 이하에서는 단일 패널 탭 화면을 사용한다.
+- migration 실패 후에는 반환된 실제 `after` snapshot을 표시한다. 상태 조회 자체가 실패하거나 실행기가 종료되면 마지막 snapshot임을 명시한다. idle Worker crash도 오류 UI에 알린다.
+- T6에서 timeout 복구는 오류·복원 불가 안내와 사용자가 명시적으로 선택하는 새 workspace 생성까지 제공한다. 현재 workspace 초기화는 파일·DB 삭제 경고를 확인한 뒤 runtime을 종료하고 새 workspace로 교체한다. 체크포인트 저장·자동 복원은 T8이다.
+- WebKit의 반복 Worker 생성에서 모듈 캐시 응답이 COEP로 차단되는 문제를 재현했다. production preview와 Cloudflare 정적 헤더에서 JS/MJS만 `Cache-Control: no-store`로 제공한다. WASM/data/wheel의 캐시 가능성은 유지한다. 개발 서버는 전체 `no-store`를 사용하고, preview는 304 응답에도 격리 헤더를 제공한다.

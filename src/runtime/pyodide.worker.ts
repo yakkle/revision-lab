@@ -82,9 +82,11 @@ self.onmessage = async (event: MessageEvent<unknown>) => {
   if (isSqliteWorkerBoot(event.data)) {
     const boot = event.data;
     try {
+      send({ ...boot, type: "PROGRESS", message: "Python 런타임 로딩 중" });
       const pyodideBase = new URL("pyodide/", boot.assetBase);
       const pyodideModule = await import(/* @vite-ignore */ new URL("pyodide.mjs", pyodideBase).href) as typeof import("pyodide");
       pyodide = await pyodideModule.loadPyodide({ indexURL: pyodideBase.href });
+      send({ ...boot, type: "PROGRESS", message: "Alembic · SQLAlchemy 초기화 중" });
       await loadAlembic(pyodide, boot.assetBase);
       bootContext = { protocolVersion: boot.protocolVersion, workspaceId: boot.workspaceId, mode: "sqlite" };
       send({ ...boot, type: "READY" });
@@ -101,6 +103,7 @@ self.onmessage = async (event: MessageEvent<unknown>) => {
   if (isWorkerBoot(event.data)) {
     const boot = event.data;
     try {
+      send({ protocolVersion: 1, requestId: boot.requestId, workspaceId: boot.workspaceId, type: "PROGRESS", message: "Python · PostgreSQL 런타임 연결 중" });
       const rpc = new SyncRpc(
         boot.port,
         new Int32Array(boot.control),
@@ -173,6 +176,7 @@ _revision_lab_install_module("pglite_sqlalchemy", __revision_lab_dialect_source,
       return;
     }
     try {
+      send({ protocolVersion: 1, requestId: value.requestId, workspaceId: value.workspaceId, type: "PROGRESS", message: value.type === "RUN_COMMAND" || value.type === "RUN_ALEMBIC" ? "Alembic 실행 및 실제 DB 상태 확인 중" : "Workspace 읽기 · 저장 중" });
       const request = JSON.stringify(value);
       pyodide.globals.set("__revision_lab_request", request);
       const encoded = String(pyodide.runPython("handle_safely(__revision_lab_request)"));

@@ -37,6 +37,29 @@ afterEach(() => {
 });
 
 describe("Alembic workspace client", () => {
+  it("notifies the UI if an idle Worker crashes", async () => {
+    const client = new AlembicRuntimeClient("sqlite");
+    client.onFailure = vi.fn();
+    await client.start();
+    TestWorker.instances[0]!.dispatchEvent(new ErrorEvent("error", { message: "idle crash" }));
+    expect(client.onFailure).toHaveBeenCalledWith({ code: "RUNTIME_WORKER_CRASH", message: "idle crash" });
+    await expect(client.inspect()).rejects.toMatchObject({ fault: { code: "RUNTIME_WORKER_CRASH" } });
+  });
+  it("delivers progress without resolving or unlocking the pending request", async () => {
+    const client = new AlembicRuntimeClient("sqlite", "workspace_1");
+    client.onProgress = vi.fn();
+    await client.start();
+    const result = client.inspect();
+    await Promise.resolve();
+    const worker = TestWorker.instances[0]!;
+    const request = worker.requests[0]!;
+    worker.dispatchEvent(new MessageEvent("message", { data: { ...request, type: "PROGRESS", message: "inspecting" } }));
+    expect(client.onProgress).toHaveBeenCalledWith("inspecting");
+    await expect(client.inspect()).rejects.toMatchObject({ fault: { code: "RUNTIME_BUSY" } });
+    worker.respond(request);
+    await result;
+    client.close();
+  });
   it("rejects overlapping requests and ignores replies for another workspace", async () => {
     const client = new AlembicRuntimeClient("sqlite", "workspace_1");
     await client.start();

@@ -5,6 +5,8 @@ import {
 import { RuntimeClientError } from "./runtime-client";
 
 type RequestBody =
+  | { type: "RUN_COMMAND"; command: string }
+  | { type: "READ_TABLE"; table: string }
   | { type: "CREATE_WORKSPACE" }
   | { type: "RUN_ALEMBIC"; argv: string[] }
   | { type: "READ_FILE"; path: string }
@@ -46,6 +48,8 @@ function waitForBoot(worker: Worker, requestId: string): Promise<void> {
 }
 
 export class AlembicRuntimeClient {
+  onProgress?: (message: string) => void;
+  onFailure?: (fault: RpcFault) => void;
   private worker?: Worker;
   private pgliteWorker?: Worker;
   private control?: Int32Array;
@@ -71,6 +75,18 @@ export class AlembicRuntimeClient {
     const reply = await this.request({ type: "RUN_ALEMBIC", argv }, 30_000);
     if (reply.type !== "COMMAND_RESULT") throw this.invalidReply(reply);
     return reply.result;
+  }
+
+  async runCommand(command: string): Promise<CommandResult> {
+    const reply = await this.request({ type: "RUN_COMMAND", command }, 30_000);
+    if (reply.type !== "COMMAND_RESULT") throw this.invalidReply(reply);
+    return reply.result;
+  }
+
+  async readTable(table: string) {
+    const reply = await this.request({ type: "READ_TABLE", table });
+    if (reply.type !== "TABLE_DATA") throw this.invalidReply(reply);
+    return reply.data;
   }
 
   async readFile(path: string): Promise<string> {
@@ -100,12 +116,12 @@ export class AlembicRuntimeClient {
     if (this.mode === "postgresql" && (!crossOriginIsolated || typeof SharedArrayBuffer === "undefined")) {
       throw new RuntimeClientError({ code: "POSTGRESQL_UNAVAILABLE", message: "PostgreSQL requires cross-origin isolation and SharedArrayBuffer" });
     }
+    const requestId = crypto.randomUUID();
     const worker = new Worker(new URL("./pyodide.worker.ts", import.meta.url), { type: "module", name: `revision-lab-${this.mode}` });
     this.worker = worker;
     worker.addEventListener("message", this.handleMessage);
     worker.addEventListener("error", this.handleCrash);
     worker.addEventListener("messageerror", this.handleMessageError);
-    const requestId = crypto.randomUUID();
     const boot: SqliteWorkerBoot = {
       protocolVersion: PROTOCOL_VERSION,
       requestId,
@@ -151,7 +167,7 @@ export class AlembicRuntimeClient {
       const timeout = window.setTimeout(() => {
         this.pending.delete(requestId);
         const error = new RuntimeClientError({
-          code: body.type === "RUN_ALEMBIC" ? "ALEMBIC_COMMAND_TIMEOUT" : "RUNTIME_REQUEST_TIMEOUT",
+          code: body.type === "RUN_ALEMBIC" || body.type === "RUN_COMMAND" ? "ALEMBIC_COMMAND_TIMEOUT" : "RUNTIME_REQUEST_TIMEOUT",
           message: `${body.type} exceeded ${timeoutMs} ms`,
         });
         this.stop(error);
@@ -166,6 +182,10 @@ export class AlembicRuntimeClient {
   private readonly handleMessage = (event: MessageEvent<unknown>) => {
     const value = event.data;
     if (!isEnvelope(value) || value.workspaceId !== this.workspaceId) return;
+    if (isAlembicRuntimeReply(value) && value.type === "PROGRESS") {
+      this.onProgress?.(value.message);
+      return;
+    }
     const pending = this.pending.get(value.requestId);
     if (!pending) return;
     this.pending.delete(value.requestId);
@@ -208,6 +228,8 @@ export class AlembicRuntimeClient {
       pending.reject(error);
     }
     this.pending.clear();
+    const fault = runtimeFault(error);
+    if (fault.code !== "RUNTIME_CLOSED") this.onFailure?.(fault);
   }
 }
 
