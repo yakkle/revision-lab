@@ -77,7 +77,41 @@ else:
 
 MODELS_TEMPLATE = '''from sqlalchemy import MetaData
 
+# 빈 metadata는 manual revision 실습을 그대로 시작할 수 있게 유지합니다.
 metadata = MetaData()
+
+# 자유 실습용 SQLAlchemy 2.x 모델 예제
+#
+# User 테이블로 autogenerate를 연습하려면 위 import와 metadata 두 줄을 지우고,
+# 아래 예제 각 줄의 "# "를 제거한 뒤 파일을 저장하세요.
+#
+# from datetime import datetime
+#
+# from sqlalchemy import DateTime, MetaData, String, func
+# from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+#
+# NAMING_CONVENTION = {
+#     "ix": "ix_%(column_0_label)s",
+#     "uq": "uq_%(table_name)s_%(column_0_name)s",
+#     "pk": "pk_%(table_name)s",
+# }
+#
+# class Base(DeclarativeBase):
+#     metadata = MetaData(naming_convention=NAMING_CONVENTION)
+#
+# class User(Base):
+#     __tablename__ = "users"
+#
+#     id: Mapped[int] = mapped_column(primary_key=True)
+#     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+#     display_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+#     created_at: Mapped[datetime] = mapped_column(
+#         DateTime(timezone=True),
+#         server_default=func.now(),
+#         nullable=False,
+#     )
+#
+# metadata = Base.metadata
 '''
 
 
@@ -444,7 +478,59 @@ def _dispatch(root: Path, argv: list[str], stdout: io.StringIO) -> None:
         os.chdir(previous)
 
 
-def _create_workspace(root: Path) -> dict[str, Any]:
+def _import_clone(root: Path, seed: dict[str, Any]) -> None:
+    if not isinstance(seed, dict) or not isinstance(seed.get("files"), list) or len(seed["files"]) > 200:
+        raise RuntimeRequestError("INVALID_CLONE_SEED", "Clone seed files are invalid")
+    if root.exists() and any(root.iterdir()):
+        raise RuntimeRequestError("WORKSPACE_ALREADY_EXISTS", "Clone target must be an empty workspace")
+    root.mkdir(parents=True, exist_ok=True)
+    for item in seed["files"]:
+        if not isinstance(item, dict) or not isinstance(item.get("path"), str) or not isinstance(item.get("content"), str):
+            raise RuntimeRequestError("INVALID_CLONE_SEED", "Clone seed file is invalid")
+        content = item["content"]
+        if len(content.encode("utf-8")) > MAX_FILE_BYTES:
+            raise RuntimeRequestError("FILE_TOO_LARGE", "Clone seed file exceeds the 1 MiB limit")
+        target = _relative_path(root, item["path"])
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+    database = seed.get("sqliteDatabase")
+    if DATABASE_MODE == "sqlite":
+        if database is None:
+            (root / "database.sqlite").touch(exist_ok=True)
+        elif not isinstance(database, str):
+            raise RuntimeRequestError("INVALID_CLONE_SEED", "SQLite clone database is invalid")
+        else:
+            try:
+                payload = base64.b64decode(database, validate=True)
+            except Exception as error:
+                raise RuntimeRequestError("INVALID_CLONE_SEED", "SQLite clone database is not valid base64") from error
+            if len(payload) > 32 * 1024 * 1024:
+                raise RuntimeRequestError("CLONE_TOO_LARGE", "SQLite clone database exceeds 32 MiB")
+            (root / "database.sqlite").write_bytes(payload)
+    elif database is not None:
+        raise RuntimeRequestError("INVALID_CLONE_SEED", "PostgreSQL clone must not include a SQLite database")
+
+
+def _export_clone(root: Path) -> dict[str, Any]:
+    files = []
+    for path in _editable_files(root):
+        if path.stat().st_size > MAX_FILE_BYTES:
+            raise RuntimeRequestError("FILE_TOO_LARGE", "Clone source file exceeds the 1 MiB limit")
+        files.append({"path": path.relative_to(root).as_posix(), "content": path.read_text(encoding="utf-8")})
+    seed: dict[str, Any] = {"files": files}
+    if DATABASE_MODE == "sqlite":
+        database = root / "database.sqlite"
+        payload = database.read_bytes() if database.exists() else b""
+        if len(payload) > 32 * 1024 * 1024:
+            raise RuntimeRequestError("CLONE_TOO_LARGE", "SQLite clone database exceeds 32 MiB")
+        seed["sqliteDatabase"] = base64.b64encode(payload).decode("ascii")
+    return seed
+
+
+def _create_workspace(root: Path, seed: dict[str, Any] | None = None) -> dict[str, Any]:
+    if seed is not None:
+        _import_clone(root, seed)
+        return _state(root)
     root.mkdir(parents=True, exist_ok=True)
     if DATABASE_MODE == "sqlite":
         (root / "database.sqlite").touch(exist_ok=True)
@@ -553,11 +639,13 @@ def handle(request_json: str) -> str:
     root = _workspace(workspace_id)
 
     if request_type == "CREATE_WORKSPACE":
-        return json.dumps({"type": "WORKSPACE_CREATED", "state": _create_workspace(root)})
+        return json.dumps({"type": "WORKSPACE_CREATED", "state": _create_workspace(root, request.get("seed"))})
     if not root.exists():
         raise RuntimeRequestError("WORKSPACE_NOT_FOUND", "Create the workspace before using it")
     if request_type == "READ_TABLE":
         return json.dumps({"type": "TABLE_DATA", "data": _read_table(root, request["table"])})
+    if request_type == "EXPORT_CLONE":
+        return json.dumps({"type": "CLONE_EXPORTED", "seed": _export_clone(root)})
     if request_type == "RUN_COMMAND":
         try:
             source = request["command"]

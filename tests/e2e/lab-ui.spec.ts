@@ -32,7 +32,13 @@ def upgrade():
     op.bulk_insert(users, [{"id": i, "name": "user " + str(i), "large": 9007199254740993} for i in range(51)])
 def downgrade():
     op.drop_table("users")
+${Array.from({ length: 80 }, (_, index) => `# editor scroll verification line ${index + 1}`).join("\n")}
 `);
+    const scroller = page.locator(".code-editor .cm-scroller");
+    const dimensions = await scroller.evaluate((element) => ({ scrollHeight: element.scrollHeight, clientHeight: element.clientHeight }));
+    expect(dimensions.scrollHeight).toBeGreaterThan(dimensions.clientHeight);
+    await scroller.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+    await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
     await expect(page.getByRole("button", { name: "명령 실행", exact: true })).toBeDisabled();
     await page.getByRole("button", { name: "파일 저장", exact: true }).click();
     await expect(page.getByRole("button", { name: "명령 실행", exact: true })).toBeEnabled();

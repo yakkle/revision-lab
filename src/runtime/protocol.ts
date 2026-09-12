@@ -31,6 +31,7 @@ export type WorkerBoot = Envelope & {
   control: SharedArrayBuffer;
   response: SharedArrayBuffer;
   assetBase: string;
+  databaseDump?: Blob;
 };
 export type PGliteReconnect = Envelope & {
   type: "RECONNECT_PGLITE";
@@ -39,6 +40,7 @@ export type PGliteReconnect = Envelope & {
   response: SharedArrayBuffer;
   assetBase: string;
 };
+export type PGliteExport = Envelope & { type: "EXPORT_PGLITE" };
 export type SqliteWorkerBoot = Envelope & {
   type: "BOOT_SQLITE";
   assetBase: string;
@@ -86,6 +88,9 @@ export type SchemaChange = {
   after?: unknown;
 };
 export type SchemaDiff = { changes: SchemaChange[]; alembicVersion: { before: string[]; after: string[] } };
+export type WorkspaceSeedFile = { path: string; content: string };
+export type PythonWorkspaceSeed = { files: WorkspaceSeedFile[]; sqliteDatabase?: string };
+export type RuntimeCloneSeed = PythonWorkspaceSeed & { pgliteDatabase?: Blob };
 export type CommandResult = {
   success: boolean;
   argv: string[];
@@ -101,7 +106,8 @@ export type CommandResult = {
 export type SqliteRuntimeRequest = Envelope & (
   | { type: "RUN_COMMAND"; command: string }
   | { type: "READ_TABLE"; table: string }
-  | { type: "CREATE_WORKSPACE" }
+  | { type: "CREATE_WORKSPACE"; seed?: PythonWorkspaceSeed }
+  | { type: "EXPORT_CLONE" }
   | { type: "RUN_ALEMBIC"; argv: string[] }
   | { type: "READ_FILE"; path: string }
   | { type: "WRITE_FILE"; path: string; content: string }
@@ -112,6 +118,7 @@ export type SqliteRuntimeReply = Envelope & (
   | { type: "TABLE_DATA"; data: TableData }
   | { type: "READY" }
   | { type: "WORKSPACE_CREATED"; state: WorkspaceState }
+  | { type: "CLONE_EXPORTED"; seed: PythonWorkspaceSeed }
   | { type: "COMMAND_RESULT"; result: CommandResult }
   | { type: "FILE_CONTENT"; path: string; content: string }
   | { type: "FILE_WRITTEN"; state: WorkspaceState; fileChanges: FileChange[] }
@@ -174,7 +181,8 @@ export function isWorkerBoot(value: unknown): value is WorkerBoot {
   try {
     return value.port instanceof MessagePort && value.control instanceof SharedArrayBuffer && value.control.byteLength === CONTROL_BYTES &&
       value.response instanceof SharedArrayBuffer && value.response.byteLength === RESPONSE_BYTES &&
-      typeof value.assetBase === "string" && new URL(value.assetBase).origin === location.origin;
+      typeof value.assetBase === "string" && new URL(value.assetBase).origin === location.origin &&
+      (value.databaseDump === undefined || value.databaseDump instanceof Blob);
   } catch {
     return false;
   }
@@ -189,6 +197,10 @@ export function isPGliteReconnect(value: unknown): value is PGliteReconnect {
   } catch {
     return false;
   }
+}
+
+export function isPGliteExport(value: unknown): value is PGliteExport {
+  return isEnvelope(value) && value.type === "EXPORT_PGLITE";
 }
 
 export function isSqliteWorkerBoot(value: unknown): value is SqliteWorkerBoot {
@@ -206,7 +218,8 @@ export function isSqliteRuntimeRequest(value: unknown): value is SqliteRuntimeRe
   if (value.type === "READ_TABLE") return typeof value.table === "string" && value.table.length > 0 && value.table.length <= 512;
   const validPath = (path: unknown) => typeof path === "string" && path.length > 0 && path.length <= 512 &&
     !path.startsWith("/") && !path.split("/").some((part) => part === "" || part === "." || part === "..");
-  if (value.type === "CREATE_WORKSPACE" || value.type === "INSPECT") return true;
+  if (value.type === "CREATE_WORKSPACE") return value.seed === undefined || isPythonWorkspaceSeed(value.seed);
+  if (value.type === "EXPORT_CLONE" || value.type === "INSPECT") return true;
   if (value.type === "RUN_ALEMBIC") {
     return Array.isArray(value.argv) && value.argv.length > 0 && value.argv.length <= 64 &&
       value.argv.every((item) => typeof item === "string" && item.length > 0 && item.length <= 4096);
@@ -214,6 +227,15 @@ export function isSqliteRuntimeRequest(value: unknown): value is SqliteRuntimeRe
   if (value.type === "READ_FILE") return validPath(value.path);
   return value.type === "WRITE_FILE" && validPath(value.path) &&
     typeof value.content === "string" && new TextEncoder().encode(value.content).length <= 1024 * 1024;
+}
+
+function isPythonWorkspaceSeed(value: unknown): value is PythonWorkspaceSeed {
+  if (!isRecord(value) || !Array.isArray(value.files) || value.files.length > 200) return false;
+  const encoder = new TextEncoder();
+  const validPath = (path: unknown) => typeof path === "string" && path.length > 0 && path.length <= 512 &&
+    !path.startsWith("/") && !path.split("/").some((part) => part === "" || part === "." || part === "..");
+  if (!value.files.every((file) => isRecord(file) && validPath(file.path) && typeof file.content === "string" && encoder.encode(file.content).length <= 1024 * 1024)) return false;
+  return value.sqliteDatabase === undefined || (typeof value.sqliteDatabase === "string" && value.sqliteDatabase.length <= 48 * 1024 * 1024);
 }
 
 function isStringArray(value: unknown): value is string[] {
@@ -266,6 +288,7 @@ export function isSqliteRuntimeReply(value: unknown): value is SqliteRuntimeRepl
   if (value.type === "READY") return true;
   if (value.type === "ERROR") return isRecord(value.error) && typeof value.error.code === "string" && typeof value.error.message === "string";
   if (value.type === "WORKSPACE_CREATED" || value.type === "STATE_SNAPSHOT") return isWorkspaceState(value.state);
+  if (value.type === "CLONE_EXPORTED") return isPythonWorkspaceSeed(value.seed);
   if (value.type === "FILE_CONTENT") return typeof value.path === "string" && typeof value.content === "string";
   if (value.type === "FILE_WRITTEN") return isWorkspaceState(value.state) && isFileChanges(value.fileChanges);
   return value.type === "COMMAND_RESULT" && isRecord(value.result) && typeof value.result.success === "boolean" &&

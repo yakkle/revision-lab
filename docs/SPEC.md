@@ -267,9 +267,9 @@ Cloudflare Pages의 정적 `_headers`에 최소 다음 정책을 둔다.
 - 외부 archive는 사용자 확인 전 실행하지 않는다.
 - 공개 배포, commit, push는 별도 명시적 승인 없이는 수행하지 않는다.
 
-## 9. T5 구현 범위와 후속 작업
+## 9. 구현 범위와 후속 작업
 
-- 두 모드의 Alembic online 명령, revision graph, schema snapshot/diff API와 브라우저 통합 테스트가 구현되어 있다. 결과를 탐색하는 Lab UI는 T6에서 연결했으며, lesson validator와 Alice/Bob workspace 복제·통합은 T7에서 연결한다.
+- 두 모드의 Alembic online 명령, revision graph, schema snapshot/diff API와 브라우저 통합 테스트가 구현되어 있다. T6에서 Lab UI를 연결했고 T7에서 lesson validator와 Alice/Bob workspace 복제·통합을 연결했다.
 - 현재 PGlite instance는 기존 기술 검증과 동일하게 `memory://`를 사용한다. 2.3절의 IndexedDB 데이터 디렉터리 및 checkpoint 저장·복원은 T8에서 완성한다.
 - T2 기술 검증 client의 PGlite 재연결 기능은 유지된다. 공통 Alembic client에는 아직 파일·DB를 함께 복구하는 경로가 없다. 전체 명령 timeout 또는 Worker crash에서는 실행기를 종료하고 후속 요청을 거절하며, 빈 workspace를 자동 생성하지 않는다. 4.3절의 통합 복구는 T8의 완료 조건이다.
 
@@ -289,3 +289,15 @@ Cloudflare Pages의 정적 `_headers`에 최소 다음 정책을 둔다.
 - migration 실패 후에는 반환된 실제 `after` snapshot을 표시한다. 상태 조회 자체가 실패하거나 실행기가 종료되면 마지막 snapshot임을 명시한다. idle Worker crash도 오류 UI에 알린다.
 - T6에서 timeout 복구는 오류·복원 불가 안내와 사용자가 명시적으로 선택하는 새 workspace 생성까지 제공한다. 현재 workspace 초기화는 파일·DB 삭제 경고를 확인한 뒤 runtime을 종료하고 새 workspace로 교체한다. 체크포인트 저장·자동 복원은 T8이다.
 - WebKit의 반복 Worker 생성에서 모듈 캐시 응답이 COEP로 차단되는 문제를 재현했다. production preview와 Cloudflare 정적 헤더에서 JS/MJS만 `Cache-Control: no-store`로 제공한다. WASM/data/wheel의 캐시 가능성은 유지한다. 개발 서버는 전체 `no-store`를 사용하고, preview는 304 응답에도 격리 헤더를 제공한다.
+
+## 11. T7 교육 흐름과 협업 시뮬레이션 계약
+
+- 가이드 모드와 자유 실습 모드는 같은 `AlembicRuntimeClient`와 `RUN_COMMAND` 경로를 사용한다. 가이드가 migration 결과를 생성하거나 성공 상태를 합성하지 않는다.
+- 다섯 lesson은 `init`, 수동 revision, upgrade/downgrade, autogenerate 검토, Alice/Bob branch와 merge다. SQLite와 PostgreSQL에서 같은 정의와 validator를 사용한다.
+- validator는 실제 workspace 파일 존재, `ScriptDirectory` revision graph, Inspector schema, `alembic_version`, 명령 전후 snapshot 전이를 중심으로 판정한다. autogenerate 여부처럼 상태만으로 구분할 수 없는 항목은 runtime이 반환한 구조화된 argv와 실제 생성 revision을 함께 사용하며 특정 파일 본문 문자열에는 의존하지 않는다.
+- init, 미적용 수동 revision, upgrade, downgrade, autogenerate 생성·검토·적용, multiple-head 오류를 관찰한 이력은 현재 탭의 workspace 상태에 유지한다. 이후 DB 상태가 이동해도 이미 확인한 lesson 단계가 취소되지 않는다. T8 전에는 새로고침 후 유지하지 않는다.
+- 협업 실습은 저장하지 않은 편집이 없고 DB current가 하나의 file head인 단일 workspace에서만 시작한다. 원본은 공통 Base가 되고 Alice, Bob, Integration 세 workspace를 추가해 최대 네 runtime을 사용한다.
+- 내부 clone seed는 T7 세션 복제 전용이다. SQLite는 workspace 텍스트 파일과 최대 32 MiB의 실제 database 파일을 복제한다. PostgreSQL은 같은 파일과 PGlite `dumpDataDir()` 결과를 새 PGlite instance의 `loadDataDir`로 전달한다. 이는 T8의 IndexedDB checkpoint나 `WorkspaceArchiveV1` 공개 import/export 형식을 대신하지 않는다.
+- “PR 파일 합치기”는 공통 base 이후 Alice와 Bob이 만든 revision 파일만 Integration runtime에 저장한다. 각 actor에 하나 이상의 독립 revision이 있어야 하며, 동일 파일 경로는 `REVISION_FILE_CONFLICT`로 중단한다.
+- Integration의 multiple heads, 실패하는 `upgrade head`, 복수 `down_revision`을 가진 merge revision, merge head의 DB current 상태는 모두 실제 Alembic 결과로 판정한다. 같은 revision ID 충돌이나 DDL 충돌도 조용히 해결하지 않고 runtime 오류로 보여준다.
+- 협업 그룹의 workspace를 초기화하면 연결된 Base, Alice, Bob, Integration runtime과 메모리 상태를 함께 제거한 뒤 새 단일 workspace를 만든다.

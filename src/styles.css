@@ -29,6 +29,23 @@ p{line-height:1.6}
 .runtime-bar>span:last-child{margin-left:auto;color:var(--muted)}
 progress{width:100px;accent-color:var(--acid)}
 .session-note{font-size:13px;color:var(--muted);margin:10px 0 18px}
+.guide-collapsed{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 16px;padding:12px 14px;border:1px solid var(--line);border-left:3px solid var(--cyan);border-radius:7px;background:#151d17}
+.guide-collapsed>div{display:flex;align-items:center;gap:12px}.guide-collapsed strong{color:var(--cyan)}.guide-collapsed span{font-size:14px;color:var(--muted)}
+.lesson-guide{margin:0 0 16px;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:#141b15}
+.lesson-nav{display:grid;grid-template-columns:repeat(5,minmax(0,1fr)) auto;border-bottom:1px solid var(--line);overflow:auto}
+.lesson-nav button{display:flex;align-items:center;gap:8px;min-width:145px;padding:11px 12px;border:0;border-right:1px solid var(--line);border-radius:0;background:#192119;text-align:left}
+.lesson-nav button[aria-selected=true]{background:#263224;color:var(--acid)}
+.lesson-nav button>span{display:grid;place-items:center;min-width:24px;height:24px;border:1px solid currentColor;border-radius:50%;font:12px monospace}
+.lesson-nav .free-mode{min-width:max-content;border-right:0;color:var(--muted)}
+.lesson-content{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(280px,.7fr);gap:24px;padding:18px}
+.lesson-title{display:flex;gap:14px;align-items:flex-start}.lesson-title>span{font:22px monospace;color:var(--acid)}
+.lesson-title h2{font:700 18px ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:-.02em;margin:1px 0 4px}
+.lesson-title p{font-size:14px;color:var(--muted);margin:0}.lesson-copy ol{margin:14px 0;padding-left:45px;color:#d8dfd2}.lesson-copy li{font-size:14px;line-height:1.65;padding-left:3px}
+.lesson-example{margin:14px 0 0;background:#101610}.lesson-example summary{color:var(--cyan);font-weight:700}.lesson-example p{font-size:14px;color:var(--muted);margin:10px 0}.lesson-example .example-path{font-size:13px;margin-bottom:8px}.lesson-example pre{max-height:260px;overflow:auto;padding:12px;border:1px solid var(--line);border-radius:5px;background:#0c120d;color:#e8ecdf;white-space:pre;tab-size:4}
+.command-suggestions{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}.command-suggestions button{padding:6px 9px;text-align:left}.command-suggestions code{font-size:12px}
+.lesson-checks{padding:12px 14px;border:1px solid var(--line);border-radius:7px;background:#101610}.check-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:14px}.check-heading span{font:13px monospace;color:var(--muted)}.check-heading span.complete{color:var(--acid)}
+.lesson-checks ul{list-style:none;margin:10px 0 0;padding:0}.lesson-checks li{display:flex;gap:8px;padding:5px 0;color:var(--muted);font-size:13px;line-height:1.45}.lesson-checks li span{font-family:monospace}.lesson-checks li.complete{color:var(--acid)}
+.collaboration-controls{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:14px 18px;border-top:1px solid var(--line);background:#1b251d}.collaboration-controls p{margin:0;font-size:14px}.collaboration-controls .hint,.collaboration-controls .warning{margin:0}.actor-switcher{display:flex;gap:5px;flex-wrap:wrap}.actor-switcher button[aria-pressed=true]{border-color:var(--acid);color:var(--acid)}
 .panel-tabs{display:flex;gap:5px;margin-bottom:10px;overflow:auto}
 .panel-tabs button{white-space:nowrap;background:transparent;border-color:transparent}
 .panel-tabs [aria-selected=true]{background:var(--surface);border-color:var(--line);color:var(--acid)}
@@ -39,9 +56,11 @@ progress{width:100px;accent-color:var(--acid)}
 .editor-layout{display:grid;grid-template-columns:175px minmax(0,1fr);height:465px}
 .file-tree{border-right:1px solid var(--line);overflow:auto;padding:8px}
 .file-tree button{display:flex;align-items:center;gap:5px;width:100%;text-align:left;border:1px solid transparent;background:transparent;font:13px monospace;padding:9px 6px;overflow-wrap:anywhere}
-.editor-document{min-width:0;display:flex;flex-direction:column;height:100%}
+.editor-document{min-width:0;min-height:0;display:flex;flex-direction:column;height:100%;overflow:hidden}
 .file-caption{min-height:36px;font:13px monospace;padding:10px 12px;overflow-wrap:anywhere;display:flex;gap:8px}
-.code-editor{flex:1;min-height:0;font-size:14px;overflow:hidden}
+.code-editor{flex:1 1 0;min-width:0;min-height:0;height:0;font-size:14px;overflow:hidden}
+.code-editor>.cm-editor{height:100%;min-height:0}
+.code-editor .cm-scroller{min-height:0;overflow:auto}
 .editor-help{font-size:12px;color:var(--muted);margin:0;padding:7px 12px;border-top:1px solid var(--line)}
 .panel-body{height:465px;overflow:auto;padding:14px}
 .empty{color:var(--muted);padding:18px 8px;font-size:14px;line-height:1.7}
@@ -103,6 +122,7 @@ summary{cursor:pointer;font-size:14px;color:var(--muted)}
   .workspace-bar{align-items:flex-start;flex-direction:column;gap:14px}
   .workspace-controls{justify-content:flex-start}
   .editor-layout{grid-template-columns:145px minmax(0,1fr)}
+  .lesson-nav{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:max-content}
 }
 @media(max-width:850px){
   main{padding:0 12px 24px}
@@ -122,5 +142,7 @@ summary{cursor:pointer;font-size:14px;color:var(--muted)}
   .terminal button{padding:8px}
   .panel-tabs button{font-size:13px;padding:9px}
   .session-note{font-size:12px}
+  .guide-collapsed{align-items:flex-start}.guide-collapsed>div{display:block}.guide-collapsed span{display:block;margin-top:4px}
+  .lesson-content{grid-template-columns:1fr;padding:14px;gap:14px}.collaboration-controls{align-items:flex-start;flex-direction:column;padding:14px}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important}}

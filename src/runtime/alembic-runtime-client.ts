@@ -1,13 +1,15 @@
 import {
   CONTROL, CONTROL_BYTES, PROTOCOL_VERSION, RESPONSE_BYTES, STATE, isEnvelope, isRecord, isAlembicRuntimeReply,
-  type CommandResult, type DatabaseMode, type FileChange, type RpcFault, type AlembicRuntimeReply, type SqliteWorkerBoot, type WorkerBoot, type WorkspaceState,
+  type CommandResult, type DatabaseMode, type FileChange, type PythonWorkspaceSeed, type RpcFault, type RuntimeCloneSeed,
+  type AlembicRuntimeReply, type SqliteWorkerBoot, type WorkerBoot, type WorkspaceState,
 } from "./protocol";
 import { RuntimeClientError } from "./runtime-client";
 
 type RequestBody =
   | { type: "RUN_COMMAND"; command: string }
   | { type: "READ_TABLE"; table: string }
-  | { type: "CREATE_WORKSPACE" }
+  | { type: "CREATE_WORKSPACE"; seed?: PythonWorkspaceSeed }
+  | { type: "EXPORT_CLONE" }
   | { type: "RUN_ALEMBIC"; argv: string[] }
   | { type: "READ_FILE"; path: string }
   | { type: "WRITE_FILE"; path: string; content: string }
@@ -57,7 +59,7 @@ export class AlembicRuntimeClient {
   private terminalError?: Error;
   private readonly pending = new Map<string, PendingRequest>();
 
-  constructor(readonly mode: DatabaseMode, readonly workspaceId = `${mode}-${crypto.randomUUID()}`) {}
+  constructor(readonly mode: DatabaseMode, readonly workspaceId = `${mode}-${crypto.randomUUID()}`, private readonly cloneSeed?: RuntimeCloneSeed) {}
 
   start(): Promise<void> {
     if (this.terminalError) return Promise.reject(this.terminalError);
@@ -66,9 +68,17 @@ export class AlembicRuntimeClient {
   }
 
   async createWorkspace(): Promise<WorkspaceState> {
-    const reply = await this.request({ type: "CREATE_WORKSPACE" });
+    const seed = this.cloneSeed ? { files: this.cloneSeed.files, sqliteDatabase: this.cloneSeed.sqliteDatabase } : undefined;
+    const reply = await this.request({ type: "CREATE_WORKSPACE", seed });
     if (reply.type !== "WORKSPACE_CREATED") throw this.invalidReply(reply);
     return reply.state;
+  }
+
+  async exportClone(): Promise<RuntimeCloneSeed> {
+    const reply = await this.request({ type: "EXPORT_CLONE" });
+    if (reply.type !== "CLONE_EXPORTED") throw this.invalidReply(reply);
+    if (this.mode === "sqlite") return reply.seed;
+    return { ...reply.seed, pgliteDatabase: await this.exportPgliteDatabase() };
   }
 
   async runAlembic(argv: string[]): Promise<CommandResult> {
@@ -141,7 +151,8 @@ export class AlembicRuntimeClient {
         pglite.addEventListener("error", this.handleCrash);
         pglite.addEventListener("messageerror", this.handleMessageError);
         const pgReady = waitForBoot(pglite, requestId);
-        const common = { ...boot, type: "BOOT", runtime: "alembic", control, response } satisfies Omit<WorkerBoot, "port">;
+        const common = { ...boot, type: "BOOT", runtime: "alembic", control, response,
+          databaseDump: this.cloneSeed?.pgliteDatabase } satisfies Omit<WorkerBoot, "port">;
         worker.postMessage({ ...common, port: channel.port1 }, [channel.port1]);
         pglite.postMessage({ ...common, port: channel.port2 }, [channel.port2]);
         await Promise.all([ready, pgReady]);
@@ -210,6 +221,34 @@ export class AlembicRuntimeClient {
   private invalidReply(reply: AlembicRuntimeReply): RuntimeClientError {
     const type = isEnvelope(reply) && isRecord(reply) ? String(reply.type) : "unknown";
     return new RuntimeClientError({ code: "RUNTIME_INVALID_RESPONSE", message: `Unexpected Alembic response: ${type}` });
+  }
+
+  private exportPgliteDatabase(): Promise<Blob> {
+    const worker = this.pgliteWorker;
+    if (!worker) return Promise.reject(new RuntimeClientError({ code: "PGLITE_EXPORT_FAILED", message: "PGlite runtime is not ready" }));
+    const requestId = crypto.randomUUID();
+    return new Promise((resolve, reject) => {
+      const finish = (error?: Error, dump?: Blob) => {
+        window.clearTimeout(timeout);
+        worker.removeEventListener("message", onMessage);
+        if (error) reject(error);
+        else if (dump) resolve(dump);
+      };
+      const onMessage = (event: MessageEvent<unknown>) => {
+        const value = event.data;
+        if (!isEnvelope(value) || value.requestId !== requestId || value.workspaceId !== this.workspaceId || !isRecord(value)) return;
+        if (value.type === "PGLITE_EXPORTED" && value.dump instanceof Blob) finish(undefined, value.dump);
+        else if (value.type === "ERROR" && isRecord(value.error) && typeof value.error.code === "string" && typeof value.error.message === "string") {
+          finish(new RuntimeClientError({ code: value.error.code, message: value.error.message }));
+        }
+      };
+      const timeout = window.setTimeout(
+        () => finish(new RuntimeClientError({ code: "PGLITE_EXPORT_TIMEOUT", message: "PGlite clone export exceeded 15 seconds" })),
+        15_000,
+      );
+      worker.addEventListener("message", onMessage);
+      worker.postMessage({ protocolVersion: PROTOCOL_VERSION, requestId, workspaceId: this.workspaceId, type: "EXPORT_PGLITE" });
+    });
   }
 
   private stop(error: Error): void {

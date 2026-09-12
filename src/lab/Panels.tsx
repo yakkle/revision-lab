@@ -75,6 +75,7 @@ export function LearningNote({ workspace }: { workspace?: Workspace }) {
   let text = "먼저 alembic init migrations를 실행하세요. 생성된 models.py와 migration 파일을 직접 편집할 수 있습니다.";
   if (workspace?.broken) text = "실행기가 중단되어 마지막으로 확인한 상태를 표시합니다. 현재 버전은 체크포인트 복원을 지원하지 않습니다. 새 workspace에서 다시 시작할 수 있습니다.";
   else if (result?.error) text = "명령이 실패했습니다. 원본 오류를 확인하고 실제 DB와 diff를 비교하세요. 실패했다고 모든 변경이 되돌아갔다고 가정하지 마세요.";
+  else if (workspace?.snapshot?.files.includes("models.py") && workspace.snapshot.revisions.length === 0) text = "models.py에 주석으로 포함된 SQLAlchemy 2.x User 예제를 확인하세요. 예제의 주석을 제거하고 저장하면 autogenerate로 실제 migration 후보를 만들 수 있습니다. 빈 metadata를 유지하면 수동 revision부터 연습할 수 있습니다.";
   else if (result?.argv.includes("--autogenerate")) text = "Autogenerate는 migration 후보만 만듭니다. 생성된 파일을 검토한 뒤 upgrade하세요. rename이나 데이터 변환은 직접 수정해야 할 수 있습니다.";
   else if (workspace?.snapshot && workspace.snapshot.revisions.filter((node) => node.isHead).length > 1) text = "서로 다른 revision ID라도 여러 head가 생길 수 있습니다. alembic heads로 확인한 뒤 alembic merge <head1> <head2>로 연결하세요. DDL 충돌은 별도로 해결해야 합니다.";
   else if (result) text = "Revision 파일을 만드는 것과 DB에 적용하는 것은 다릅니다. graph의 head와 DB current를 비교하세요. upgrade 또는 downgrade 후 실제 schema와 version 행을 확인하세요.";

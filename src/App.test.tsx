@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import * as capabilityModule from "./capabilities/detect-runtime-capabilities";
 import { createLab } from "./lab/store";
+import { emptyLessonEvidence } from "./lessons/lessons";
 
 const readyCapabilities: capabilityModule.RuntimeCapabilities = {
   checks: [
@@ -49,11 +50,22 @@ describe("App", () => {
     );
   });
 
+  it("shows a practical SQLAlchemy 2.x User model in the autogenerate guide", async () => {
+    vi.spyOn(capabilityModule, "detectRuntimeCapabilities").mockReturnValue(readyCapabilities);
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "학습 가이드 열기" }));
+    await user.click(screen.getByRole("tab", { name: /autogenerate 검토/ }));
+    expect(screen.getByLabelText("models.py 예제 코드")).toHaveTextContent("class User(Base)");
+    expect(screen.getByLabelText("models.py 예제 코드")).toHaveTextContent("metadata = Base.metadata");
+  });
+
   it("shows timeout recovery without claiming a restored database", () => {
     vi.spyOn(capabilityModule, "detectRuntimeCapabilities").mockReturnValue(readyCapabilities);
     const lab = createLab();
     lab.store.setState({ activeId: "broken", workspaces: [{ id: "broken", name: "SQLite 1", mode: "sqlite",
       drafts: {}, entries: [], changes: [], broken: true, stale: true,
+      evidence: emptyLessonEvidence(),
       error: { code: "ALEMBIC_COMMAND_TIMEOUT", message: "RUN_COMMAND exceeded 30000 ms", traceback: "original trace" },
     }] });
     render(<App controller={lab} />);

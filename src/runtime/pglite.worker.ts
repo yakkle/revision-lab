@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 import { PGlite } from "@electric-sql/pglite";
 import {
-  CONTROL, STATE, isPGliteReconnect, isPgRequest, isWorkerBoot, rpcError,
+  CONTROL, STATE, isPGliteExport, isPGliteReconnect, isPgRequest, isWorkerBoot, rpcError,
   type PGliteReconnect, type PgResult, type RpcFault, type TaggedValue, type WorkerBoot,
 } from "./protocol";
 import { publishResponse } from "./sync-rpc";
@@ -101,6 +101,21 @@ function ready(connection: PGliteConnection): void {
 }
 
 self.onmessage = async (event: MessageEvent<unknown>) => {
+  if (isPGliteExport(event.data)) {
+    const request = event.data;
+    if (!database || workspaceId !== request.workspaceId) {
+      self.postMessage({ ...request, type: "ERROR", error: { code: "PGLITE_EXPORT_FAILED", message: "PGlite Worker has no matching database" } });
+      return;
+    }
+    try {
+      const dump = await database.dumpDataDir("gzip");
+      self.postMessage({ ...request, type: "PGLITE_EXPORTED", dump });
+    } catch (error) {
+      self.postMessage({ ...request, type: "ERROR", error: { code: "PGLITE_EXPORT_FAILED", message: error instanceof Error ? error.message : String(error) } });
+    }
+    return;
+  }
+
   if (isPGliteReconnect(event.data)) {
     const connection = event.data;
     if (!database || workspaceId !== connection.workspaceId) {
@@ -137,6 +152,7 @@ self.onmessage = async (event: MessageEvent<unknown>) => {
     ]);
     database = new PGlite({
       dataDir: "memory://", pgliteWasmModule, initdbWasmModule, fsBundle,
+      loadDataDir: boot.databaseDump,
       // Preserve JSON text across the tagged string transport. SQLAlchemy's
       // JSON result processor decodes it in Python, without JS number loss.
       parsers: { 114: (value) => value, 3802: (value) => value },

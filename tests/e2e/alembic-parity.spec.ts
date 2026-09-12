@@ -36,6 +36,10 @@ test(`runs the complete ${mode} Alembic command and inspection flow`, async ({ p
   expect(await page.evaluate(() => window.__revisionLabT3!.readFile("alembic.ini"))).toContain(
     mode === "postgresql" ? "postgresql+pglite://" : "sqlite:///",
   );
+  const modelTemplate = await page.evaluate(() => window.__revisionLabT3!.readFile("models.py"));
+  expect(modelTemplate).toContain("# 자유 실습용 SQLAlchemy 2.x 모델 예제");
+  expect(modelTemplate).toContain("# class User(Base):");
+  expect(modelTemplate).toContain("# metadata = Base.metadata");
   const traversal = await page.evaluate(async () => {
     try {
       await window.__revisionLabT3!.readFile("../outside.py");

@@ -6,6 +6,7 @@ import { createLab, type Lab, type Panel } from "./lab/store";
 import { CodeEditor } from "./lab/CodeEditor";
 import { RevisionGraph } from "./lab/RevisionGraph";
 import { DatabasePanel, DiffPanel, LearningNote, LogsPanel } from "./lab/Panels";
+import { LessonGuide } from "./lessons/LessonGuide";
 
 const panels: Array<{ id: Panel; label: string }> = [
   { id: "editor", label: "파일 / 코드" }, { id: "graph", label: "Revision DAG" },
@@ -62,6 +63,8 @@ export default function App({ controller }: { controller?: Lab }) {
     <div className="runtime-bar"><span role="status">{state.busy ? "실행 중 · " + state.progress : workspace?.broken ? "실행기 중단" : workspace?.snapshot ? workspace.name + " 준비됨" : state.progress}</span>{state.busy && <progress aria-label="런타임 진행" />}<span>선택된 환경: <strong>{mode === "sqlite" ? "SQLite" : "PostgreSQL"}</strong></span></div>
     {!capabilities.postgresqlAvailable && <p className="warning">필요한 기능: {capabilities.postgresqlBlockers.join(", ")}. COOP/COEP 헤더를 제공하는 환경에서 다시 접속하세요.</p>}
     <p className="session-note">현재 실습은 이 탭에서만 유지됩니다. 새로고침하면 파일과 DB가 사라집니다. 최대 4개 workspace · Python 코드는 브라우저 Worker에서 실제 실행됩니다.</p>
+    <LessonGuide lab={lab} workspace={workspace} workspaces={state.workspaces} collaboration={state.collaboration}
+      activeLesson={state.activeLesson} enabled={state.guideEnabled} busy={state.busy} dirty={dirty} onCommand={setCommand} />
     {workspace?.error && <section className="error-box" role="alert"><strong>{workspace.error.code}</strong><p>{workspace.error.message}</p>
       {workspace.stale && <p>표시된 snapshot은 마지막으로 확인한 상태입니다. 최신 DB 상태를 확인하지 못했습니다.</p>}
       {workspace.error.traceback && <details><summary>원본 traceback</summary><pre>{workspace.error.traceback}</pre></details>}
@@ -108,7 +111,7 @@ export default function App({ controller }: { controller?: Lab }) {
     <LearningNote workspace={workspace} />
     <dialog ref={resetDialog} className="reset-dialog" aria-labelledby="reset-title" aria-describedby="reset-description">
       <h2 id="reset-title">Workspace를 초기화할까요?</h2>
-      <p id="reset-description">{workspace?.name}의 파일과 DB를 삭제하고 처음부터 시작합니다. 저장하지 않은 편집도 사라지며 복구할 수 없습니다.</p>
+      <p id="reset-description">{state.collaboration && workspace?.collaborationId === state.collaboration.id ? "협업 실습의 공통 Base, Alice, Bob, Integration" : workspace?.name}의 파일과 DB를 삭제하고 처음부터 시작합니다. 저장하지 않은 편집도 사라지며 복구할 수 없습니다.</p>
       <div><button autoFocus onClick={() => resetDialog.current?.close()}>취소</button><button className="primary" onClick={() => { resetDialog.current?.close(); void lab.reset(); }}>파일·DB 삭제 후 초기화</button></div>
     </dialog>
     <details className="capabilities"><summary>이 브라우저의 실습 환경</summary><h2>이 브라우저의 실습 환경</h2><ul>{capabilities.checks.map((check) => <li key={check.key}>{check.supported ? "✓" : "×"} {check.label} — {check.description}</li>)}</ul></details>

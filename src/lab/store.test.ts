@@ -7,6 +7,7 @@ const snapshot: WorkspaceState = { files: ["models.py"], revisions: [], schema: 
 const result: CommandResult = { success: true, argv: ["init"], before: snapshot, after: snapshot, stdout: "done", stderr: "", fileChanges: [], schemaDiff: { changes: [], alembicVersion: { before: [], after: [] } } };
 function client(): LabClient {
   return { createWorkspace: vi.fn().mockResolvedValue(snapshot), readFile: vi.fn().mockResolvedValue("original"),
+    exportClone: vi.fn().mockResolvedValue({ files: [{ path: "models.py", content: "original" }], sqliteDatabase: "" }),
     writeFile: vi.fn().mockResolvedValue({ state: snapshot, fileChanges: [] }), runCommand: vi.fn().mockResolvedValue(result),
     readTable: vi.fn().mockResolvedValue({ table: "users", columns: [], rows: [], truncated: false }), close: vi.fn() };
 }
@@ -98,6 +99,52 @@ describe("Lab workspace orchestration", () => {
     await lab.create("sqlite");
     expect(factory).toHaveBeenCalledTimes(2);
     expect(lab.store.getState().workspaces).toHaveLength(2);
+    lab.dispose();
+  });
+
+  it("clones a real common base and integrates only Alice and Bob revision files", async () => {
+    const baseRevision = { revision: "base", path: "migrations/versions/base.py", downRevisions: [], branchLabels: [], dependsOn: [],
+      isHead: true, isBranchPoint: false, isMergePoint: false, isCurrent: true };
+    const baseState: WorkspaceState = { files: ["alembic.ini", "models.py", "migrations/env.py", baseRevision.path], revisions: [baseRevision],
+      schema: { dialect: "sqlite", tables: [], alembicVersion: ["base"] } };
+    const seed = { files: [{ path: "models.py", content: "base" }], sqliteDatabase: "AA==" };
+    const source = client();
+    vi.mocked(source.createWorkspace).mockResolvedValue(baseState);
+    vi.mocked(source.exportClone).mockResolvedValue(seed);
+    const aliceClient = client();
+    const bobClient = client();
+    const integrationClient = client();
+    for (const runtime of [aliceClient, bobClient, integrationClient]) vi.mocked(runtime.createWorkspace).mockResolvedValue(baseState);
+    vi.mocked(aliceClient.readFile).mockResolvedValue("revision = 'alice'");
+    vi.mocked(bobClient.readFile).mockResolvedValue("revision = 'bob'");
+    const aliceRevision = { ...baseRevision, revision: "alice", path: "migrations/versions/alice.py", downRevisions: ["base"], isCurrent: false };
+    const bobRevision = { ...baseRevision, revision: "bob", path: "migrations/versions/bob.py", downRevisions: ["base"], isCurrent: false };
+    const branchedState = (revisionNode: typeof aliceRevision): WorkspaceState => ({ ...baseState, files: [...baseState.files, revisionNode.path],
+      revisions: [revisionNode, { ...baseRevision, isHead: false }] });
+    const integrationStates = [branchedState(aliceRevision), { ...baseState,
+      files: [...baseState.files, aliceRevision.path, bobRevision.path],
+      revisions: [aliceRevision, bobRevision, { ...baseRevision, isHead: false, isBranchPoint: true }],
+    }];
+    vi.mocked(integrationClient.writeFile)
+      .mockResolvedValueOnce({ state: integrationStates[0], fileChanges: [{ path: aliceRevision.path, change: "added" }] })
+      .mockResolvedValueOnce({ state: integrationStates[1], fileChanges: [{ path: bobRevision.path, change: "added" }] });
+    const factory = vi.fn().mockReturnValueOnce(source).mockReturnValueOnce(aliceClient).mockReturnValueOnce(bobClient).mockReturnValueOnce(integrationClient);
+    const lab = createLab(factory);
+    await lab.create("sqlite");
+    await lab.setupCollaboration();
+    const collaboration = lab.store.getState().collaboration!;
+    expect(factory.mock.calls.slice(1).every((call) => call[2] === seed)).toBe(true);
+    expect(lab.store.getState().workspaces.map((workspace) => workspace.role)).toEqual(["base", "alice", "bob", "integration"]);
+    lab.store.setState((state) => ({ workspaces: state.workspaces.map((workspace) =>
+      workspace.id === collaboration.aliceId ? { ...workspace, snapshot: branchedState(aliceRevision) }
+        : workspace.id === collaboration.bobId ? { ...workspace, snapshot: branchedState(bobRevision) } : workspace) }));
+    await lab.integrateBranches();
+    expect(aliceClient.readFile).toHaveBeenCalledWith(aliceRevision.path);
+    expect(bobClient.readFile).toHaveBeenCalledWith(bobRevision.path);
+    expect(integrationClient.writeFile).toHaveBeenNthCalledWith(1, aliceRevision.path, "revision = 'alice'");
+    expect(integrationClient.writeFile).toHaveBeenNthCalledWith(2, bobRevision.path, "revision = 'bob'");
+    expect(lab.store.getState().collaboration?.filesIntegrated).toBe(true);
+    expect(lab.store.getState().activeId).toBe(collaboration.integrationId);
     lab.dispose();
   });
 });
