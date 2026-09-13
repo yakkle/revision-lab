@@ -9,6 +9,7 @@ button:hover:not(:disabled){border-color:var(--cyan);background:#2e3b2d}
 button:disabled{opacity:.45;cursor:not-allowed}
 button[aria-pressed=true],button[aria-current=true]{border-color:var(--acid);color:var(--acid)}
 button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible,a:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
+.visually-hidden{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
 a{color:inherit}
 .primary{background:var(--acid);color:#14200f;font-weight:700}
 .site-header{display:flex;justify-content:space-between;align-items:center;min-height:65px;border-bottom:1px solid var(--line)}
@@ -106,6 +107,7 @@ summary{cursor:pointer;font-size:14px;color:var(--muted)}
 .learning-note strong{white-space:nowrap;color:var(--acid)}
 .learning-note p{margin:0}
 .warning{color:var(--danger);font-size:14px;margin:10px 0}
+.success-banner{color:var(--acid);font-size:14px;margin:10px 0;padding:10px 12px;border:1px solid var(--acid);border-radius:6px;background:#162016}
 .terminal .warning{padding:0 16px}
 .error-box{padding:14px;border:1px solid var(--danger);border-radius:8px;margin-bottom:14px}
 .error-box strong{color:var(--danger)}
@@ -113,10 +115,18 @@ summary{cursor:pointer;font-size:14px;color:var(--muted)}
 .capabilities{color:var(--muted)}
 .capabilities h2{margin-top:16px}
 .capabilities li{font-size:13px;line-height:1.8}
-.reset-dialog{max-width:480px;width:calc(100% - 32px);padding:24px;background:var(--surface);color:inherit;border:1px solid var(--line);border-radius:10px}
-.reset-dialog::backdrop{background:rgb(0 0 0 / 65%)}
+.reset-dialog,.import-dialog{max-width:480px;width:calc(100% - 32px);padding:24px;background:var(--surface);color:inherit;border:1px solid var(--line);border-radius:10px}
+.import-dialog{max-width:900px;max-height:calc(100vh - 40px)}
+.reset-dialog::backdrop,.import-dialog::backdrop{background:rgb(0 0 0 / 65%)}
 .reset-dialog p{font-size:16px;color:var(--muted)}
 .reset-dialog>div{display:flex;gap:10px;justify-content:flex-end}
+.import-dialog>p{font-size:14px;color:var(--muted)}
+.archive-preview{display:grid;grid-template-columns:minmax(180px,.35fr) minmax(0,1fr);height:360px;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.archive-preview nav{padding:8px;border-right:1px solid var(--line);overflow:auto}
+.archive-preview nav button{display:block;width:100%;margin-bottom:4px;text-align:left;overflow-wrap:anywhere}
+.archive-preview pre{margin:0;padding:14px;overflow:auto;background:#0c120d;white-space:pre;overflow-wrap:normal}
+.review-confirm{display:flex;align-items:center;gap:8px;margin:14px 0;font-size:14px}.review-confirm input{width:18px;height:18px;accent-color:var(--acid)}
+.dialog-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:16px}
 [hidden]{display:none!important}
 @media(max-width:1100px){
   .workspace-bar{align-items:flex-start;flex-direction:column;gap:14px}
@@ -142,6 +152,7 @@ summary{cursor:pointer;font-size:14px;color:var(--muted)}
   .terminal button{padding:8px}
   .panel-tabs button{font-size:13px;padding:9px}
   .session-note{font-size:12px}
+  .archive-preview{grid-template-columns:1fr;height:auto;max-height:420px}.archive-preview nav{max-height:130px;border-right:0;border-bottom:1px solid var(--line)}.archive-preview pre{min-height:210px}
   .guide-collapsed{align-items:flex-start}.guide-collapsed>div{display:block}.guide-collapsed span{display:block;margin-top:4px}
   .lesson-content{grid-template-columns:1fr;padding:14px;gap:14px}.collaboration-controls{align-items:flex-start;flex-direction:column;padding:14px}
 }

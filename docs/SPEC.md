@@ -54,8 +54,9 @@ flowchart LR
 
 ### 2.3 PGlite Worker
 
-- workspace별 하나의 PGlite instance를 `idb://revision-lab/<workspace-id>`에 연다.
+- runtime instance마다 고유한 단일 경로 segment를 사용해 `idb://revision-lab-<workspace-id>-<runtime-id>`에 PGlite를 연다. PGlite 0.5.8 IDBFS는 중첩 mount 경로를 만들지 못하므로 `/`가 포함된 data directory 이름은 사용하지 않는다.
 - 같은 workspace의 `RECONNECT_PGLITE` 메시지로 새 RPC port와 buffer를 받아 기존 PGlite instance를 재사용한다.
+- 전체 Worker 복구는 마지막 성공 dump를 새 runtime ID에 적재한 뒤 이전 runtime의 IndexedDB database를 비동기로 정리한다. 페이지를 떠나는 Worker가 WebKit에서 database deletion을 막아도 새 runtime 부팅을 막지 않는다.
 - SQL 실행과 DB dump/restore/reset만 담당한다.
 - Alembic 파일, lesson 상태, UI 상태를 알지 못한다.
 - 동시에 하나의 RPC만 처리한다. 순서를 보장하지 못하는 요청은 `RPC_BUSY`로 거절한다.
@@ -245,7 +246,9 @@ type WorkspaceArchiveV1 = {
 - `ColumnSnapshot.type`은 해당 engine dialect로 compile한 표현을 사용한다. PostgreSQL `TIMESTAMP WITH TIME ZONE`, `JSONB`, `UUID`, `INTEGER[]` 등을 일반 문자열 타입으로 축약하지 않는다.
 - UI store는 선택된 파일, 열린 패널, 실행 중 상태만 소유한다.
 - IndexedDB에는 workspace metadata, checkpoint, lesson progress만 저장한다.
-- archive import 시 format version, 경로 traversal, 압축 해제 크기, 파일 개수를 검증한다.
+- 성공한 Alembic 명령, 저장된 파일, 새로 확인한 autogenerate revision 뒤에 파일과 실제 DB를 하나의 checkpoint로 저장한다. 실패한 명령과 저장하지 않은 초안은 마지막 성공 checkpoint를 덮어쓰지 않는다.
+- PGlite dump는 WebKit의 Worker `Blob` 영속화 문제를 피하기 위해 IndexedDB에는 `ArrayBuffer`로 정규화하고 Worker 경계에서만 gzip `Blob`으로 변환한다. 명령 기록은 checkpoint당 최근 20개만 유지한다.
+- archive import 시 format version, 경로 traversal·중복 경로, UTF-8, 암호화·분할·ZIP64, 압축 전후 크기와 파일 개수를 압축 해제 및 runtime 생성 전에 검증한다.
 
 ## 8. 배포와 보안
 
@@ -253,6 +256,7 @@ Cloudflare Pages의 정적 `_headers`에 최소 다음 정책을 둔다.
 
 ```text
 /*
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: require-corp
   Cross-Origin-Resource-Policy: same-origin
@@ -264,14 +268,15 @@ Cloudflare Pages의 정적 `_headers`에 최소 다음 정책을 둔다.
 - isolation을 사용할 수 없으면 PostgreSQL 모드는 비활성화하고 SQLite는 계속 제공한다.
 - production 자산은 same-origin으로 제공한다.
 - migration Python은 Worker 안에서 실행하지만 임의 코드라는 사실을 UI에 알린다.
-- 외부 archive는 사용자 확인 전 실행하지 않는다.
+- 외부 archive는 manifest와 파일 내용을 modal dialog에서 보여주며, Python 파일이 있으면 사용자가 검토 checkbox를 확인하기 전 runtime을 생성하거나 코드를 실행하지 않는다.
+- PGlite 0.5.8의 PostgreSQL WASM 동적 module loader가 직접 `eval`을 사용하므로 `'unsafe-eval'`은 hash가 붙은 전용 `pglite.worker-*.js` 응답에만 허용한다. document와 나머지 asset CSP에는 허용하지 않는다.
 - 공개 배포, commit, push는 별도 명시적 승인 없이는 수행하지 않는다.
 
 ## 9. 구현 범위와 후속 작업
 
-- 두 모드의 Alembic online 명령, revision graph, schema snapshot/diff API와 브라우저 통합 테스트가 구현되어 있다. T6에서 Lab UI를 연결했고 T7에서 lesson validator와 Alice/Bob workspace 복제·통합을 연결했다.
-- 현재 PGlite instance는 기존 기술 검증과 동일하게 `memory://`를 사용한다. 2.3절의 IndexedDB 데이터 디렉터리 및 checkpoint 저장·복원은 T8에서 완성한다.
-- T2 기술 검증 client의 PGlite 재연결 기능은 유지된다. 공통 Alembic client에는 아직 파일·DB를 함께 복구하는 경로가 없다. 전체 명령 timeout 또는 Worker crash에서는 실행기를 종료하고 후속 요청을 거절하며, 빈 workspace를 자동 생성하지 않는다. 4.3절의 통합 복구는 T8의 완료 조건이다.
+- T1~T8의 두 DB Alembic runtime, Lab UI, lesson·협업, IndexedDB checkpoint, 자동 복구, archive와 CSP가 구현되어 있다.
+- T2 기술 검증 client의 PGlite 재연결 기능은 유지한다. 공통 Alembic client의 전체 Worker crash·timeout은 마지막 성공 checkpoint의 파일과 실제 DB dump로 새 runtime을 만들며, checkpoint가 없거나 복구 부팅이 실패하면 자동 재시도 loop 없이 오류와 수동 복구·초기화 선택지를 표시한다.
+- 실제 공개 URL 배포와 cold/warm cache 검증은 별도 승인이 필요한 T9 범위다.
 
 ## 10. T6 Lab UI 계약
 
@@ -301,3 +306,13 @@ Cloudflare Pages의 정적 `_headers`에 최소 다음 정책을 둔다.
 - “PR 파일 합치기”는 공통 base 이후 Alice와 Bob이 만든 revision 파일만 Integration runtime에 저장한다. 각 actor에 하나 이상의 독립 revision이 있어야 하며, 동일 파일 경로는 `REVISION_FILE_CONFLICT`로 중단한다.
 - Integration의 multiple heads, 실패하는 `upgrade head`, 복수 `down_revision`을 가진 merge revision, merge head의 DB current 상태는 모두 실제 Alembic 결과로 판정한다. 같은 revision ID 충돌이나 DDL 충돌도 조용히 해결하지 않고 runtime 오류로 보여준다.
 - 협업 그룹의 workspace를 초기화하면 연결된 Base, Alice, Bob, Integration runtime과 메모리 상태를 함께 제거한 뒤 새 단일 workspace를 만든다.
+
+## 12. T8 저장, 복구 및 archive 계약
+
+- IndexedDB `revision-lab-app`의 `checkpoints`와 `session` object store를 사용한다. workspace checkpoint와 session metadata는 같은 readwrite transaction으로 저장하고, 최대 네 workspace를 순서대로 복원한다.
+- checkpoint에는 workspace 파일, SQLite database base64 또는 PGlite gzip dump `ArrayBuffer`, lesson evidence, 역할·협업 ID, 선택 파일·revision과 최근 명령 20개를 저장한다. DB schema와 graph는 복원 runtime이 다시 inspect한 실제 상태를 사용한다.
+- 새로고침과 Worker crash·timeout은 동일한 restore 경로를 사용한다. 복원 부팅 중 발생한 실패는 다시 자동 복구하지 않아 무한 retry를 방지한다.
+- `WorkspaceArchiveV1`은 실제 ZIP이며 `manifest.json`, index 기반 `files/*.txt`, `database.sqlite` 또는 `database.pglite.tgz`만 허용한다. 압축 archive는 40 MiB, DB는 32 MiB, 텍스트 파일은 각 1 MiB, 파일은 200개, 총 압축 해제 크기는 48 MiB로 제한한다.
+- archive는 원래 workspace ID를 신뢰하거나 덮어쓰지 않고 새 workspace ID로 가져온다. mode와 database format이 일치해야 하며 선언되지 않은 ZIP entry, 중복 entry·파일 경로, 절대·상위·역슬래시 경로와 잘못된 UTF-8을 거절한다.
+- ZIP 구현은 필요할 때만 동적으로 로드해 초기 앱 bundle에서 분리한다. 내보내기는 저장하지 않은 편집이 없을 때만 허용한다.
+- reset은 runtime을 닫고 현재 PGlite IDBFS database와 앱 checkpoint를 삭제한 다음 같은 mode의 빈 workspace를 만든다. 협업 그룹이면 네 workspace를 함께 삭제한다.

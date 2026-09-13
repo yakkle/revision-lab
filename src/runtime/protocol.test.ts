@@ -67,6 +67,24 @@ describe("runtime protocol validation", () => {
     channel.port2.close();
   });
 
+  it("requires a bounded PGlite database instance identifier", () => {
+    const channel = new MessageChannel();
+    const boot = {
+      protocolVersion: PROTOCOL_VERSION,
+      requestId: "request-1",
+      workspaceId: "workspace_1",
+      type: "BOOT",
+      port: channel.port1,
+      control: new SharedArrayBuffer(CONTROL_BYTES),
+      response: new SharedArrayBuffer(RESPONSE_BYTES),
+      assetBase: location.href,
+    };
+    expect(isWorkerBoot({ ...boot, databaseId: "workspace_1-runtime_1" })).toBe(true);
+    expect(isWorkerBoot({ ...boot, databaseId: "../escape" })).toBe(false);
+    channel.port1.close();
+    channel.port2.close();
+  });
+
   it("validates a PGlite reconnect with fresh RPC buffers", () => {
     const channel = new MessageChannel();
     expect(isPGliteReconnect({

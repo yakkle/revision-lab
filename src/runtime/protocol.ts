@@ -31,6 +31,8 @@ export type WorkerBoot = Envelope & {
   control: SharedArrayBuffer;
   response: SharedArrayBuffer;
   assetBase: string;
+  databaseId: string;
+  previousDatabaseId?: string;
   databaseDump?: Blob;
 };
 export type PGliteReconnect = Envelope & {
@@ -41,6 +43,7 @@ export type PGliteReconnect = Envelope & {
   assetBase: string;
 };
 export type PGliteExport = Envelope & { type: "EXPORT_PGLITE" };
+export type PGliteDelete = Envelope & { type: "DELETE_PGLITE" };
 export type SqliteWorkerBoot = Envelope & {
   type: "BOOT_SQLITE";
   assetBase: string;
@@ -90,7 +93,13 @@ export type SchemaChange = {
 export type SchemaDiff = { changes: SchemaChange[]; alembicVersion: { before: string[]; after: string[] } };
 export type WorkspaceSeedFile = { path: string; content: string };
 export type PythonWorkspaceSeed = { files: WorkspaceSeedFile[]; sqliteDatabase?: string };
-export type RuntimeCloneSeed = PythonWorkspaceSeed & { pgliteDatabase?: Blob };
+export type RuntimeCloneSeed = PythonWorkspaceSeed & {
+  pgliteDatabase?: Blob | ArrayBuffer;
+  pgliteDatabaseId?: string;
+  // Checkpoint recovery replaces the prior runtime instance. New clones and
+  // imports omit this flag so their source database remains untouched.
+  reusePgliteDatabase?: boolean;
+};
 export type CommandResult = {
   success: boolean;
   argv: string[];
@@ -182,6 +191,8 @@ export function isWorkerBoot(value: unknown): value is WorkerBoot {
     return value.port instanceof MessagePort && value.control instanceof SharedArrayBuffer && value.control.byteLength === CONTROL_BYTES &&
       value.response instanceof SharedArrayBuffer && value.response.byteLength === RESPONSE_BYTES &&
       typeof value.assetBase === "string" && new URL(value.assetBase).origin === location.origin &&
+      typeof value.databaseId === "string" && /^[a-zA-Z0-9_-]{1,128}$/.test(value.databaseId) &&
+      (value.previousDatabaseId === undefined || (typeof value.previousDatabaseId === "string" && /^[a-zA-Z0-9_-]{1,128}$/.test(value.previousDatabaseId))) &&
       (value.databaseDump === undefined || value.databaseDump instanceof Blob);
   } catch {
     return false;
@@ -201,6 +212,10 @@ export function isPGliteReconnect(value: unknown): value is PGliteReconnect {
 
 export function isPGliteExport(value: unknown): value is PGliteExport {
   return isEnvelope(value) && value.type === "EXPORT_PGLITE";
+}
+
+export function isPGliteDelete(value: unknown): value is PGliteDelete {
+  return isEnvelope(value) && value.type === "DELETE_PGLITE";
 }
 
 export function isSqliteWorkerBoot(value: unknown): value is SqliteWorkerBoot {

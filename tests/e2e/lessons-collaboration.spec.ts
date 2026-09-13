@@ -38,6 +38,7 @@ for (const mode of ["SQLite", "PostgreSQL"] as const) {
     await expect(page.locator(".lesson-checks")).toContainText("2 / 2");
 
     await page.getByRole("navigation", { name: "Workspace 파일" }).getByRole("button", { name: "models.py", exact: true }).click();
+    await page.waitForFunction(() => !document.querySelector(".code-editor")?.hasAttribute("inert"));
     await page.locator(".cm-content").fill(SQLALCHEMY_USER_MODEL_EXAMPLE);
     await page.getByRole("button", { name: "파일 저장", exact: true }).click();
     await selectLesson(page, /autogenerate 검토/);

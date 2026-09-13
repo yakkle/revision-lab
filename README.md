@@ -36,6 +36,7 @@ Revision Lab은 Alembic을 어렵게 느끼는 Python 백엔드 개발자가 브
 - [T5 PostgreSQL Alembic 기능 동등성 검증](docs/T5.md)
 - [T6 Lab UI 작업 기록](docs/T6.md)
 - [T7 교육 흐름과 협업 시뮬레이션 작업 기록](docs/T7.md)
+- [T8 저장, 복구 및 완성도 작업 기록](docs/T8.md)
 
 - [에이전트 작업 규칙](AGENTS.md)
 
@@ -90,4 +91,4 @@ pnpm test:e2e
 
 Graph 노드와 DB current revision을 선택하면 해당 migration 파일이 열린다. Ctrl/⌘+S로 파일을 저장하고, 터미널의 위·아래 방향키로 명령 기록을 불러올 수 있다. 원본 오류와 학습 설명은 별도 패널에서 확인한다.
 
-동시에 최대 4개 workspace를 유지한다. 현재 파일·DB·편집 내용은 탭 메모리에만 있으므로 새로고침하면 사라진다. 초기화는 확인 후 선택된 workspace를 삭제하며, 협업 실습 중에는 연결된 네 workspace를 함께 삭제한다. 체크포인트 복원은 T8에서 구현한다.
+동시에 최대 4개 workspace를 유지한다. 성공한 명령과 저장한 파일, lesson 진행도는 브라우저 IndexedDB의 마지막 성공 체크포인트에 보관되며 새로고침이나 Worker 중단 후 자동 복원된다. 저장하지 않은 편집은 체크포인트 대상이 아니다. **Workspace 내보내기**로 SQLite/PGlite DB와 파일을 ZIP으로 저장하고, **Workspace 가져오기**에서 Python 파일을 검토한 뒤 별도 workspace로 열 수 있다. 초기화는 확인 후 선택된 workspace의 runtime·DB·체크포인트를 삭제하며, 협업 실습 중에는 연결된 네 workspace를 함께 삭제한다.

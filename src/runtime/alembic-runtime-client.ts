@@ -57,9 +57,12 @@ export class AlembicRuntimeClient {
   private control?: Int32Array;
   private starting?: Promise<void>;
   private terminalError?: Error;
+  private readonly pgliteDatabaseId: string;
   private readonly pending = new Map<string, PendingRequest>();
 
-  constructor(readonly mode: DatabaseMode, readonly workspaceId = `${mode}-${crypto.randomUUID()}`, private readonly cloneSeed?: RuntimeCloneSeed) {}
+  constructor(readonly mode: DatabaseMode, readonly workspaceId = `${mode}-${crypto.randomUUID()}`, private readonly cloneSeed?: RuntimeCloneSeed) {
+    this.pgliteDatabaseId = `${workspaceId}-${crypto.randomUUID()}`;
+  }
 
   start(): Promise<void> {
     if (this.terminalError) return Promise.reject(this.terminalError);
@@ -78,7 +81,7 @@ export class AlembicRuntimeClient {
     const reply = await this.request({ type: "EXPORT_CLONE" });
     if (reply.type !== "CLONE_EXPORTED") throw this.invalidReply(reply);
     if (this.mode === "sqlite") return reply.seed;
-    return { ...reply.seed, pgliteDatabase: await this.exportPgliteDatabase() };
+    return { ...reply.seed, pgliteDatabase: await this.exportPgliteDatabase(), pgliteDatabaseId: this.pgliteDatabaseId };
   }
 
   async runAlembic(argv: string[]): Promise<CommandResult> {
@@ -117,6 +120,20 @@ export class AlembicRuntimeClient {
     return reply.state;
   }
 
+  async destroy(): Promise<void> {
+    if (this.mode === "postgresql" && this.pgliteWorker) {
+      try { await this.deletePgliteDatabase(); }
+      finally { this.close(); }
+      return;
+    }
+    this.close();
+  }
+
+  forceCrashForTest(): void {
+    this.stop(new RuntimeClientError({ code: "RUNTIME_WORKER_CRASH", message: "Worker was forcibly terminated by the T8 test hook" }));
+    this.starting = undefined;
+  }
+
   close(): void {
     this.stop(new RuntimeClientError({ code: "RUNTIME_CLOSED", message: "Alembic runtime closed" }));
     this.starting = undefined;
@@ -151,8 +168,13 @@ export class AlembicRuntimeClient {
         pglite.addEventListener("error", this.handleCrash);
         pglite.addEventListener("messageerror", this.handleMessageError);
         const pgReady = waitForBoot(pglite, requestId);
+        const databaseDump = this.cloneSeed?.pgliteDatabase instanceof ArrayBuffer
+          ? new Blob([this.cloneSeed.pgliteDatabase], { type: "application/gzip" })
+          : this.cloneSeed?.pgliteDatabase;
         const common = { ...boot, type: "BOOT", runtime: "alembic", control, response,
-          databaseDump: this.cloneSeed?.pgliteDatabase } satisfies Omit<WorkerBoot, "port">;
+          databaseId: this.pgliteDatabaseId,
+          previousDatabaseId: this.cloneSeed?.reusePgliteDatabase ? this.cloneSeed.pgliteDatabaseId : undefined,
+          databaseDump } satisfies Omit<WorkerBoot, "port">;
         worker.postMessage({ ...common, port: channel.port1 }, [channel.port1]);
         pglite.postMessage({ ...common, port: channel.port2 }, [channel.port2]);
         await Promise.all([ready, pgReady]);
@@ -248,6 +270,33 @@ export class AlembicRuntimeClient {
       );
       worker.addEventListener("message", onMessage);
       worker.postMessage({ protocolVersion: PROTOCOL_VERSION, requestId, workspaceId: this.workspaceId, type: "EXPORT_PGLITE" });
+    });
+  }
+
+  private deletePgliteDatabase(): Promise<void> {
+    const worker = this.pgliteWorker;
+    if (!worker) return Promise.resolve();
+    const requestId = crypto.randomUUID();
+    return new Promise((resolve, reject) => {
+      const finish = (error?: Error) => {
+        window.clearTimeout(timeout);
+        worker.removeEventListener("message", onMessage);
+        if (error) reject(error); else resolve();
+      };
+      const onMessage = (event: MessageEvent<unknown>) => {
+        const value = event.data;
+        if (!isEnvelope(value) || value.requestId !== requestId || value.workspaceId !== this.workspaceId || !isRecord(value)) return;
+        if (value.type === "PGLITE_DELETED") finish();
+        else if (value.type === "ERROR" && isRecord(value.error) && typeof value.error.code === "string" && typeof value.error.message === "string") {
+          finish(new RuntimeClientError({ code: value.error.code, message: value.error.message }));
+        }
+      };
+      const timeout = window.setTimeout(
+        () => finish(new RuntimeClientError({ code: "PGLITE_DELETE_TIMEOUT", message: "PGlite deletion exceeded 15 seconds" })),
+        15_000,
+      );
+      worker.addEventListener("message", onMessage);
+      worker.postMessage({ protocolVersion: PROTOCOL_VERSION, requestId, workspaceId: this.workspaceId, type: "DELETE_PGLITE" });
     });
   }
 

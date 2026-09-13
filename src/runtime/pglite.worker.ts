@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 import { PGlite } from "@electric-sql/pglite";
 import {
-  CONTROL, STATE, isPGliteExport, isPGliteReconnect, isPgRequest, isWorkerBoot, rpcError,
+  CONTROL, STATE, isPGliteDelete, isPGliteExport, isPGliteReconnect, isPgRequest, isWorkerBoot, rpcError,
   type PGliteReconnect, type PgResult, type RpcFault, type TaggedValue, type WorkerBoot,
 } from "./protocol";
 import { publishResponse } from "./sync-rpc";
@@ -13,7 +13,25 @@ type PGliteConnection = WorkerBoot | PGliteReconnect;
 
 let database: PGlite | undefined;
 let workspaceId: string | undefined;
+let databaseId: string | undefined;
 let activePort: MessagePort | undefined;
+
+// PGlite 0.5.8's IDBFS adapter creates one mount directory with FS.mkdir,
+// so the dataDir name must be a single path segment rather than a nested path.
+const dataDirName = (id: string) => `revision-lab-${id}`;
+
+function deleteDatabase(name: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    // Emscripten IDBFS keys the backing database by its mount path.
+    const request = indexedDB.deleteDatabase(`/pglite/${name}`);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error ?? new Error("PGlite IndexedDB deletion failed"));
+    // A page reload can briefly retain the previous Worker's IDBFS connection.
+    // Keep the deletion request pending; IndexedDB completes it after that
+    // connection is released.
+    request.onblocked = () => undefined;
+  });
+}
 
 function textProperty(value: unknown, key: string): string | undefined {
   if (typeof value !== "object" || value === null || !(key in value)) return undefined;
@@ -101,6 +119,27 @@ function ready(connection: PGliteConnection): void {
 }
 
 self.onmessage = async (event: MessageEvent<unknown>) => {
+  if (isPGliteDelete(event.data)) {
+    const request = event.data;
+    if (workspaceId !== request.workspaceId) {
+      self.postMessage({ ...request, type: "ERROR", error: { code: "PGLITE_DELETE_FAILED", message: "PGlite Worker has no matching database" } });
+      return;
+    }
+    try {
+      activePort?.close();
+      activePort = undefined;
+      await database?.close();
+      database = undefined;
+      if (databaseId) await deleteDatabase(dataDirName(databaseId));
+      workspaceId = undefined;
+      databaseId = undefined;
+      self.postMessage({ ...request, type: "PGLITE_DELETED" });
+    } catch (error) {
+      self.postMessage({ ...request, type: "ERROR", error: { code: "PGLITE_DELETE_FAILED", message: error instanceof Error ? error.message : String(error) } });
+    }
+    return;
+  }
+
   if (isPGliteExport(event.data)) {
     const request = event.data;
     if (!database || workspaceId !== request.workspaceId) {
@@ -150,8 +189,10 @@ self.onmessage = async (event: MessageEvent<unknown>) => {
         return result.blob();
       }),
     ]);
+    const dataDir = dataDirName(boot.databaseId);
+    if (boot.databaseDump) await deleteDatabase(dataDir);
     database = new PGlite({
-      dataDir: "memory://", pgliteWasmModule, initdbWasmModule, fsBundle,
+      dataDir: `idb://${dataDir}`, pgliteWasmModule, initdbWasmModule, fsBundle,
       loadDataDir: boot.databaseDump,
       // Preserve JSON text across the tagged string transport. SQLAlchemy's
       // JSON result processor decodes it in Python, without JS number loss.
@@ -159,8 +200,12 @@ self.onmessage = async (event: MessageEvent<unknown>) => {
     });
     await database.waitReady;
     workspaceId = boot.workspaceId;
+    databaseId = boot.databaseId;
     attachConnection(boot);
     ready(boot);
+    if (boot.previousDatabaseId && boot.previousDatabaseId !== boot.databaseId) {
+      void deleteDatabase(dataDirName(boot.previousDatabaseId)).catch(() => undefined);
+    }
   } catch (error) {
     Atomics.store(control, CONTROL.STATE, STATE.BROKEN);
     Atomics.notify(control, CONTROL.STATE);

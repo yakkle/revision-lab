@@ -1,4 +1,18 @@
 import { expect, test } from "@playwright/test";
+import { readdir } from "node:fs/promises";
+
+test("keeps unsafe-eval out of the document CSP and scopes the PGlite exception to its Worker asset", async ({ request }) => {
+  const document = await request.get("/");
+  const documentCsp = document.headers()["content-security-policy"];
+  expect(documentCsp).toContain("script-src 'self' 'wasm-unsafe-eval'");
+  expect(documentCsp).not.toContain("'unsafe-eval'");
+  expect(documentCsp).toContain("object-src 'none'");
+
+  const workerName = (await readdir("dist/assets")).find((name) => /^pglite\.worker-[^.]+\.js$/.test(name));
+  expect(workerName).toBeTruthy();
+  const worker = await request.get(`/assets/${workerName}`);
+  expect(worker.headers()["content-security-policy"]).toContain("script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval'");
+});
 
 test("keeps module responses out of the WebKit cache without disabling WASM caching", async ({ request }) => {
   const script = await request.head("/runtime/pyodide/pyodide.mjs");

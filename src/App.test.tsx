@@ -60,7 +60,7 @@ describe("App", () => {
     expect(screen.getByLabelText("models.py 예제 코드")).toHaveTextContent("metadata = Base.metadata");
   });
 
-  it("shows timeout recovery without claiming a restored database", () => {
+  it("offers an explicit checkpoint retry when automatic recovery did not complete", () => {
     vi.spyOn(capabilityModule, "detectRuntimeCapabilities").mockReturnValue(readyCapabilities);
     const lab = createLab();
     lab.store.setState({ activeId: "broken", workspaces: [{ id: "broken", name: "SQLite 1", mode: "sqlite",
@@ -69,8 +69,8 @@ describe("App", () => {
       error: { code: "ALEMBIC_COMMAND_TIMEOUT", message: "RUN_COMMAND exceeded 30000 ms", traceback: "original trace" },
     }] });
     render(<App controller={lab} />);
-    expect(screen.getByRole("alert")).toHaveTextContent("저장된 체크포인트가 없어 자동 복원할 수 없습니다");
+    expect(screen.getByRole("alert")).toHaveTextContent("자동 복원이 완료되지 않았습니다");
     expect(screen.getByRole("button", { name: "명령 실행" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "복구: 새 workspace 만들기" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "체크포인트 복원 다시 시도" })).toBeEnabled();
   });
 });

@@ -86,6 +86,7 @@ export class RuntimeClient {
   private starting?: Promise<void>;
   private recovering?: Promise<void>;
   private readonly workspaceId = `t2-${crypto.randomUUID()}`;
+  private readonly pgliteDatabaseId = `${this.workspaceId}-${crypto.randomUUID()}`;
   private readonly pending = new Map<string, { resolve: (value: string) => void; reject: (error: Error) => void }>();
 
   start(): Promise<void> {
@@ -315,7 +316,8 @@ json.dumps(report)
       pgliteWorker.addEventListener("messageerror", markDatabaseBroken);
     }
 
-    const common = { ...context, type: "BOOT", control: controlBuffer, response: responseBuffer, assetBase } satisfies Omit<WorkerBoot, "port">;
+    const common = { ...context, type: "BOOT", control: controlBuffer, response: responseBuffer, assetBase,
+      databaseId: this.pgliteDatabaseId } satisfies Omit<WorkerBoot, "port">;
     const pgliteConnection: WorkerBoot | PGliteReconnect = existingPgliteWorker
       ? { ...common, type: "RECONNECT_PGLITE", port: channel.port2 }
       : { ...common, port: channel.port2 };
