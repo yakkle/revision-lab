@@ -81,7 +81,7 @@ pnpm test:e2e
 
 ## Lab 사용
 
-1. DB 환경을 선택하고 **새 workspace 만들기**를 누른다.
+1. 첫 화면 또는 **Workspace 관리**에서 **SQLite workspace 만들기**나 **PostgreSQL workspace 만들기**를 누른다.
 2. 터미널에서 `alembic init migrations`를 실행한다.
 3. `alembic revision -m "create users"`로 파일을 생성하고, 편집기에서 `upgrade()`와 `downgrade()`를 작성해 저장한다.
 4. `alembic upgrade head`를 실행한 뒤 Schema / Data와 Diff에서 실제 변경을 확인한다. 테이블을 선택하면 최대 50행의 데이터를 읽는다.
@@ -89,6 +89,6 @@ pnpm test:e2e
 
 **학습 가이드 열기**를 선택하면 다섯 lesson의 완료 여부를 실제 revision graph와 DB snapshot으로 확인한다. 협업 lesson은 하나의 current head를 공통 base로 준비한 뒤 Alice, Bob, Integration workspace를 실제 파일·DB 상태에서 복제한다. Alice와 Bob의 revision 파일을 합치면 integration에서 실제 multiple-head 오류를 확인하고 merge revision으로 해결할 수 있다.
 
-Graph 노드와 DB current revision을 선택하면 해당 migration 파일이 열린다. Ctrl/⌘+S로 파일을 저장하고, 터미널의 위·아래 방향키로 명령 기록을 불러올 수 있다. 원본 오류와 학습 설명은 별도 패널에서 확인한다.
+Graph 노드와 DB current revision을 선택하면 해당 migration 파일이 열린다. Ctrl/⌘+S로 파일을 저장하고, 터미널의 위·아래 방향키로 명령 기록을 불러올 수 있다. 가이드의 명령은 터미널 입력창에만 채워지며 **명령 실행**을 눌러야 실제 실행된다. 편집기는 앱 작업면 안에서 최대화할 수 있고 Escape로 복원한다.
 
-동시에 최대 4개 workspace를 유지한다. 성공한 명령과 저장한 파일, lesson 진행도는 브라우저 IndexedDB의 마지막 성공 체크포인트에 보관되며 새로고침이나 Worker 중단 후 자동 복원된다. 저장하지 않은 편집은 체크포인트 대상이 아니다. **Workspace 내보내기**로 SQLite/PGlite DB와 파일을 ZIP으로 저장하고, **Workspace 가져오기**에서 Python 파일을 검토한 뒤 별도 workspace로 열 수 있다. 초기화는 확인 후 선택된 workspace의 runtime·DB·체크포인트를 삭제하며, 협업 실습 중에는 연결된 네 workspace를 함께 삭제한다.
+동시에 최대 4개 workspace를 유지한다. 성공한 명령과 저장한 파일, lesson 진행도, 조절한 터미널 높이는 브라우저 IndexedDB의 마지막 성공 체크포인트와 session에 보관되며 새로고침이나 Worker 중단 후 자동 복원된다. 저장하지 않은 편집은 체크포인트 대상이 아니다. **Workspace 관리**의 내보내기로 SQLite/PGlite DB와 파일을 ZIP으로 저장하고, 가져오기에서 Python 파일을 검토한 뒤 별도 workspace로 열 수 있다. 초기화는 확인 후 선택된 workspace의 runtime·DB·체크포인트를 삭제하며, 협업 실습 중에는 연결된 네 workspace를 함께 삭제한다.

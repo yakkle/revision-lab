@@ -36,4 +36,6 @@ jobs:
           cache: true
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
+      - if: matrix.browser == 'chromium'
+        run: pnpm test:e2e:dev
       - run: pnpm exec playwright test --project=${{ matrix.browser }}

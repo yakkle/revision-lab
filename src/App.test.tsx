@@ -25,14 +25,16 @@ describe("App", () => {
     vi.restoreAllMocks();
   });
 
-  it("allows an available PostgreSQL environment to be selected", async () => {
+  it("creates an available PostgreSQL workspace directly", async () => {
     vi.spyOn(capabilityModule, "detectRuntimeCapabilities").mockReturnValue(readyCapabilities);
     const user = userEvent.setup();
-    render(<App />);
+    const lab = createLab();
+    const create = vi.spyOn(lab, "create").mockResolvedValue(undefined);
+    render(<App controller={lab} />);
 
-    await user.click(screen.getByRole("button", { name: "PostgreSQL 환경 선택" }));
+    await user.click(screen.getAllByRole("button", { name: "PostgreSQL workspace 만들기" })[0]);
 
-    expect(screen.getByText("선택된 환경:")).toHaveTextContent("PostgreSQL");
+    expect(create).toHaveBeenCalledWith("postgresql");
   });
 
   it("disables PostgreSQL and explains missing isolation capabilities", () => {
@@ -44,8 +46,10 @@ describe("App", () => {
 
     render(<App />);
 
-    expect(screen.getByRole("button", { name: "PostgreSQL 환경 선택" })).toBeDisabled();
-    expect(screen.getByText(/필요한 기능:/)).toHaveTextContent(
+    expect(screen.getAllByRole("button", { name: "PostgreSQL workspace 만들기" })).toEqual(expect.arrayContaining([
+      expect.objectContaining({ disabled: true }),
+    ]));
+    expect(screen.getAllByText(/필요한 기능:/)[0]).toHaveTextContent(
       "Cross-origin isolation, SharedArrayBuffer",
     );
   });
@@ -58,6 +62,35 @@ describe("App", () => {
     await user.click(screen.getByRole("tab", { name: /autogenerate 검토/ }));
     expect(screen.getByLabelText("models.py 예제 코드")).toHaveTextContent("class User(Base)");
     expect(screen.getByLabelText("models.py 예제 코드")).toHaveTextContent("metadata = Base.metadata");
+  });
+
+  it("stages a guide command in the terminal without running it", async () => {
+    vi.spyOn(capabilityModule, "detectRuntimeCapabilities").mockReturnValue(readyCapabilities);
+    const user = userEvent.setup();
+    const lab = createLab();
+    const run = vi.spyOn(lab, "run");
+    render(<App controller={lab} />);
+
+    await user.click(screen.getByRole("button", { name: "학습 가이드 열기" }));
+    await user.click(screen.getByRole("button", { name: "alembic init migrations 터미널에 입력" }));
+
+    expect(screen.getByRole("textbox", { name: "Alembic 명령" })).toHaveValue("alembic init migrations");
+    expect(screen.getByRole("textbox", { name: "Alembic 명령" })).toHaveFocus();
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("maximizes and restores the editor with the toggle and Escape", async () => {
+    vi.spyOn(capabilityModule, "detectRuntimeCapabilities").mockReturnValue(readyCapabilities);
+    const user = userEvent.setup();
+    render(<App />);
+    const shell = document.querySelector(".app-shell")!;
+
+    await user.click(screen.getByRole("button", { name: "편집기 최대화" }));
+    expect(shell).toHaveClass("editor-maximized");
+    expect(screen.getByRole("button", { name: "기본 크기로 복원" })).toHaveAttribute("aria-pressed", "true");
+    await user.keyboard("{Escape}");
+    expect(shell).not.toHaveClass("editor-maximized");
+    expect(screen.getByRole("button", { name: "편집기 최대화" })).toHaveFocus();
   });
 
   it("offers an explicit checkpoint retry when automatic recovery did not complete", () => {

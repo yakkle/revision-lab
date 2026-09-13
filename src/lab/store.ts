@@ -11,6 +11,9 @@ import {
 import { createWorkspaceArchive, type WorkspaceArchiveV1 } from "../persistence/workspace-archive";
 
 export type Panel = "editor" | "graph" | "database" | "diff" | "logs";
+export const DEFAULT_TERMINAL_DOCK_HEIGHT = 176;
+export const MIN_TERMINAL_DOCK_HEIGHT = 132;
+export const MAX_TERMINAL_DOCK_HEIGHT = 320;
 export type Draft = { text: string; saved: string };
 export type Entry = { id: number; command: string; result?: CommandResult; error?: RpcFault };
 export type Workspace = {
@@ -26,7 +29,8 @@ export type Collaboration = {
 };
 export type LabState = {
   workspaces: Workspace[]; activeId?: string; busy: boolean; progress: string; panel: Panel;
-  guideEnabled: boolean; activeLesson: LessonId; collaboration?: Collaboration; restoring: boolean;
+  guideEnabled: boolean; activeLesson: LessonId; terminalDockHeight: number;
+  collaboration?: Collaboration; restoring: boolean;
 };
 export type LabClient = Pick<AlembicRuntimeClient, "createWorkspace" | "exportClone" | "readFile" | "writeFile" | "runCommand" | "readTable" |
   "close" | "onProgress" | "onFailure"> & Partial<Pick<AlembicRuntimeClient, "destroy" | "forceCrashForTest">>;
@@ -73,13 +77,18 @@ function persistenceFault(error: unknown, code = "PERSISTENCE_FAILED"): RpcFault
   return { code, message: error instanceof Error ? error.message : String(error) };
 }
 
+function terminalDockHeight(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return DEFAULT_TERMINAL_DOCK_HEIGHT;
+  return Math.round(Math.min(MAX_TERMINAL_DOCK_HEIGHT, Math.max(MIN_TERMINAL_DOCK_HEIGHT, value)));
+}
+
 export function createLab(
   factory: ClientFactory = (mode, id, seed) => new AlembicRuntimeClient(mode, id, seed),
   repository: CheckpointRepository = createCheckpointRepository(),
 ) {
   const store = createStore<LabState>(() => ({
     workspaces: [], busy: false, progress: "Workspace를 만들어 실습을 시작하세요.", panel: "editor",
-    guideEnabled: false, activeLesson: "init", restoring: false,
+    guideEnabled: false, activeLesson: "init", terminalDockHeight: DEFAULT_TERMINAL_DOCK_HEIGHT, restoring: false,
   }));
   const clients = new Map<string, LabClient>();
   const recovering = new Set<string>();
@@ -92,7 +101,8 @@ export function createLab(
   const session = (): PersistedSession => {
     const state = store.getState();
     return { formatVersion: 1, workspaceIds: state.workspaces.map((workspace) => workspace.id), activeId: state.activeId,
-      panel: state.panel, guideEnabled: state.guideEnabled, activeLesson: state.activeLesson, collaboration: state.collaboration };
+      panel: state.panel, guideEnabled: state.guideEnabled, activeLesson: state.activeLesson,
+      terminalDockHeight: state.terminalDockHeight, collaboration: state.collaboration };
   };
   const enqueuePersistence = <T,>(operation: () => Promise<T>): Promise<T> => {
     const result = persistenceQueue.then(operation, operation);
@@ -233,7 +243,8 @@ export function createLab(
         workspaceNumber = workspaces.length;
         store.setState({ workspaces, activeId: ids.has(restored.session.activeId ?? "") ? restored.session.activeId : workspaces[0]?.id,
           panel: restored.session.panel, guideEnabled: restored.session.guideEnabled, activeLesson: restored.session.activeLesson,
-          collaboration, progress: `${workspaces.length}개 workspace 복원 완료` });
+          terminalDockHeight: terminalDockHeight(restored.session.terminalDockHeight), collaboration,
+          progress: `${workspaces.length}개 workspace 복원 완료` });
       } catch (error) {
         store.setState({ progress: `저장 상태를 복원하지 못했습니다: ${error instanceof Error ? error.message : String(error)}` });
       } finally { store.setState({ restoring: false, busy: false }); }
@@ -273,6 +284,10 @@ export function createLab(
     },
     guide(enabled: boolean) { store.setState({ guideEnabled: enabled }); void saveSession(); },
     lesson(lesson: LessonId) { store.setState({ activeLesson: lesson, guideEnabled: true }); void saveSession(); },
+    resizeTerminal(height: number, persist = false) {
+      store.setState({ terminalDockHeight: terminalDockHeight(height) });
+      if (persist) void saveSession();
+    },
     panel(panel: Panel) { store.setState({ panel }); void saveSession(); },
     edit(text: string) {
       const workspace = active();

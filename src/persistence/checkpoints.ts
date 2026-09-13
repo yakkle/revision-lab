@@ -26,6 +26,7 @@ export type PersistedSession = {
   panel: Panel;
   guideEnabled: boolean;
   activeLesson: LessonId;
+  terminalDockHeight?: number;
   collaboration?: Collaboration;
 };
 

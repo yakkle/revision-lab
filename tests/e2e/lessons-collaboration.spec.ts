@@ -19,12 +19,17 @@ for (const mode of ["SQLite", "PostgreSQL"] as const) {
   test(`${mode}: completes all lessons and the real Alice/Bob integration flow`, async ({ page }) => {
     test.setTimeout(420_000);
     await page.goto("/");
-    await page.getByRole("button", { name: `${mode} 환경 선택`, exact: true }).click();
-    await page.getByRole("button", { name: "새 workspace 만들기", exact: true }).click();
+    await page.getByRole("button", { name: `${mode} workspace 만들기`, exact: true }).click();
     await expect(page.getByRole("button", { name: "명령 실행", exact: true })).toBeEnabled({ timeout: 100_000 });
     await page.getByRole("button", { name: "학습 가이드 열기" }).click();
 
-    await runCommand(page, "alembic init migrations");
+    const entriesBefore = await page.locator(".terminal-output > div").count();
+    await page.getByRole("button", { name: "alembic init migrations 터미널에 입력", exact: true }).click();
+    await expect(page.getByRole("textbox", { name: "Alembic 명령" })).toBeFocused();
+    expect(await page.locator(".terminal-output > div").count()).toBe(entriesBefore);
+    await page.getByRole("button", { name: "명령 실행", exact: true }).click();
+    await expect(page.getByRole("button", { name: "명령 실행", exact: true })).toBeEnabled({ timeout: 60_000 });
+    await expect(page.locator(".terminal-output > div").last()).toContainText("성공");
     await expect(page.locator(".lesson-checks")).toContainText("2 / 2");
 
     await selectLesson(page, /수동 revision/);

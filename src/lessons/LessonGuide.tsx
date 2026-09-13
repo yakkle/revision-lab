@@ -26,10 +26,10 @@ function collaborationContext(workspaces: Workspace[], collaboration?: Collabora
 }
 
 export function LessonGuide({
-  lab, workspace, workspaces, collaboration, activeLesson, enabled, busy, dirty, onCommand,
+  lab, workspace, workspaces, collaboration, activeLesson, enabled, busy, dirty, onStageCommand,
 }: {
   lab: Lab; workspace?: Workspace; workspaces: Workspace[]; collaboration?: Collaboration; activeLesson: LessonId;
-  enabled: boolean; busy: boolean; dirty: boolean; onCommand: (command: string) => void;
+  enabled: boolean; busy: boolean; dirty: boolean; onStageCommand: (command: string) => void;
 }) {
   if (!enabled) {
     return <section className="guide-collapsed" aria-label="학습 가이드">
@@ -64,7 +64,7 @@ export function LessonGuide({
           <div className="example-path"><code>{lesson.example.path}</code>의 전체 내용을 아래 코드로 교체하세요.</div>
           <pre aria-label={`${lesson.example.path} 예제 코드`}><code>{lesson.example.code}</code></pre>
         </details>}
-        <div className="command-suggestions">{suggestedCommands[activeLesson]?.map((command) => <button key={command} onClick={() => onCommand(command)}><code>{command}</code></button>)}</div>
+        <div className="command-suggestions">{suggestedCommands[activeLesson]?.map((command) => <button key={command} onClick={() => onStageCommand(command)} aria-label={`${command} 터미널에 입력`}><code>{command}</code><span>터미널에 입력</span></button>)}</div>
       </div>
       <div className="lesson-checks"><div className="check-heading"><strong>실제 상태 검사</strong><span className={assessment.complete ? "complete" : ""}>{assessment.steps.filter((step) => step.complete).length} / {assessment.steps.length}</span></div>
         <ul>{assessment.steps.map((step) => <li key={step.id} className={step.complete ? "complete" : ""}><span aria-hidden="true">{step.complete ? "✓" : "○"}</span>{step.label}</li>)}</ul>
@@ -84,7 +84,7 @@ export function LessonGuide({
           })}
         </div>
         <button className="primary" disabled={busy || dirty || !actorsReady || collaboration.filesIntegrated} onClick={() => void lab.integrateBranches()}>{collaboration.filesIntegrated ? "PR 파일 합침 완료" : "Alice · Bob PR 파일 합치기"}</button>
-        {mergeCommand && <button onClick={() => { lab.select(collaboration.integrationId); onCommand(mergeCommand); }}><code>{mergeCommand}</code> 입력</button>}
+        {mergeCommand && <button onClick={() => { lab.select(collaboration.integrationId); onStageCommand(mergeCommand); }}><code>{mergeCommand}</code> 터미널에 입력</button>}
         <span className="hint">각 actor의 명령과 DB는 완전히 독립적이며, PR 합치기는 revision 파일만 integration에 복사합니다.</span>
       </>}
     </div>}

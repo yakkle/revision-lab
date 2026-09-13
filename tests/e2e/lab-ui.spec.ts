@@ -11,8 +11,7 @@ for (const mode of ["SQLite", "PostgreSQL"] as const) {
   test(`${mode}: edits and runs real migrations through the Lab UI`, async ({ page }) => {
     test.setTimeout(180_000);
     await page.goto("/");
-    await page.getByRole("button", { name: mode + " 환경 선택", exact: true }).click();
-    await page.getByRole("button", { name: "새 workspace 만들기", exact: true }).click();
+    await page.getByRole("button", { name: mode + " workspace 만들기", exact: true }).click();
     await expect(page.getByRole("button", { name: "명령 실행", exact: true })).toBeEnabled({ timeout: 100_000 });
     await command(page, "alembic init migrations");
     await expect(page.getByRole("navigation", { name: "Workspace 파일" }).getByRole("button", { name: "models.py", exact: true })).toBeVisible();
@@ -34,6 +33,21 @@ def downgrade():
     op.drop_table("users")
 ${Array.from({ length: 80 }, (_, index) => `# editor scroll verification line ${index + 1}`).join("\n")}
 `);
+    await page.getByRole("button", { name: "편집기 최대화", exact: true }).click();
+    await expect(page.locator(".app-shell")).toHaveClass(/editor-maximized/);
+    await expect(page.getByRole("region", { name: "Alembic 터미널" })).toBeHidden();
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".app-shell")).not.toHaveClass(/editor-maximized/);
+    await expect(editor).toContainText("editor scroll verification line 80");
+    const viewportLayout = await page.evaluate(() => ({
+      documentHeight: document.documentElement.scrollHeight,
+      viewportHeight: window.innerHeight,
+      editorBottom: document.querySelector(".editor-panel")?.getBoundingClientRect().bottom ?? Infinity,
+      commandBottom: document.querySelector("#command")?.getBoundingClientRect().bottom ?? Infinity,
+    }));
+    expect(viewportLayout.documentHeight).toBeLessThanOrEqual(viewportLayout.viewportHeight);
+    expect(viewportLayout.editorBottom).toBeLessThanOrEqual(viewportLayout.viewportHeight);
+    expect(viewportLayout.commandBottom).toBeLessThanOrEqual(viewportLayout.viewportHeight);
     const scroller = page.locator(".code-editor .cm-scroller");
     const dimensions = await scroller.evaluate((element) => ({ scrollHeight: element.scrollHeight, clientHeight: element.clientHeight }));
     expect(dimensions.scrollHeight).toBeGreaterThan(dimensions.clientHeight);
@@ -81,12 +95,15 @@ ${Array.from({ length: 80 }, (_, index) => `# editor scroll verification line ${
     await expect(page.getByRole("alert")).toContainText("UNSUPPORTED_SHELL_SYNTAX");
     await page.getByRole("tab", { name: "원본 로그", exact: true }).click();
     await expect(page.locator("#panel-logs")).toContainText("MultipleHeads");
+    await page.getByRole("button", { name: "학습 가이드 열기" }).click();
     await expect(page.getByRole("complementary", { name: "학습 설명" })).toBeVisible();
+    await page.getByText("Workspace 관리", { exact: true }).click();
     await page.getByRole("button", { name: "Workspace 초기화" }).click();
     await expect(page.getByRole("dialog")).toBeVisible();
     await page.getByRole("button", { name: "취소", exact: true }).click();
     await page.getByRole("tab", { name: "Schema / Data", exact: true }).click();
     await expect(page.getByTestId("db-version")).toHaveText("m1");
+    await page.getByText("Workspace 관리", { exact: true }).click();
     await page.getByRole("button", { name: "Workspace 초기화" }).click();
     await page.getByRole("button", { name: "파일·DB 삭제 후 초기화", exact: true }).click();
     await expect(page.getByRole("status")).toContainText(/준비됨|실행기 중단/, { timeout: 100_000 });
@@ -96,7 +113,8 @@ ${Array.from({ length: 80 }, (_, index) => `# editor scroll verification line ${
     await expect(page.getByRole("navigation", { name: "Workspace 파일" }).getByRole("button")).toHaveCount(0);
     const retainedId = await page.getByRole("combobox", { name: "Workspace", exact: true }).inputValue();
     await command(page, "alembic init migrations");
-    await page.getByRole("button", { name: "새 workspace 만들기", exact: true }).click();
+    await page.getByText("Workspace 관리", { exact: true }).click();
+    await page.getByRole("button", { name: mode + " workspace 만들기", exact: true }).click();
     await expect(page.getByRole("status")).toContainText(/준비됨|실행기 중단/, { timeout: 100_000 });
     await expect(page.getByRole("alert")).toHaveCount(0);
     await expect(page.getByRole("navigation", { name: "Workspace 파일" }).getByRole("button")).toHaveCount(0);
@@ -104,6 +122,21 @@ ${Array.from({ length: 80 }, (_, index) => `# editor scroll verification line ${
     await expect(page.getByRole("navigation", { name: "Workspace 파일" }).getByRole("button", { name: "models.py", exact: true })).toBeVisible();
   });
 }
+
+test("wide layout gives the maximized editor the full workbench width", async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "편집기 최대화", exact: true }).click();
+  const layout = await page.evaluate(() => {
+    const rectangle = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
+    const workbench = rectangle(".workbench");
+    const editor = rectangle(".editor-panel");
+    return { workbench: { x: workbench.x, width: workbench.width }, editor: { x: editor.x, width: editor.width } };
+  });
+  expect(layout.editor.x).toBeCloseTo(layout.workbench.x, 0);
+  expect(layout.editor.width).toBeCloseTo(layout.workbench.width, 0);
+  expect(layout.editor.width).toBeGreaterThan(1600);
+});
 
 test("narrow layout switches panels using only the keyboard", async ({ page }) => {
   await page.setViewportSize({ width: 720, height: 900 });

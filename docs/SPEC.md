@@ -316,3 +316,15 @@ Cloudflare Pages의 정적 `_headers`에 최소 다음 정책을 둔다.
 - archive는 원래 workspace ID를 신뢰하거나 덮어쓰지 않고 새 workspace ID로 가져온다. mode와 database format이 일치해야 하며 선언되지 않은 ZIP entry, 중복 entry·파일 경로, 절대·상위·역슬래시 경로와 잘못된 UTF-8을 거절한다.
 - ZIP 구현은 필요할 때만 동적으로 로드해 초기 앱 bundle에서 분리한다. 내보내기는 저장하지 않은 편집이 없을 때만 허용한다.
 - reset은 runtime을 닫고 현재 PGlite IDBFS database와 앱 checkpoint를 삭제한 다음 같은 mode의 빈 workspace를 만든다. 협업 그룹이면 네 workspace를 함께 삭제한다.
+
+## 13. T8.1 개발 CSP 및 작업면 UX 계약
+
+- Vite 개발 서버는 시작마다 임의 nonce를 만들고 `html.cspNonce`로 Fast Refresh를 포함한 Vite 주입 script와 style에 적용한다. CodeMirror가 런타임에 생성하는 style은 HTML의 `csp-nonce` meta 값을 `EditorView.cspNonce`로 전달한다. 개발 document CSP는 해당 nonce만 허용하며 `unsafe-inline`과 `unsafe-eval`을 포함하지 않는다.
+- 개발 `connect-src`는 HMR을 위해 `ws:`와 `wss:`를 허용한다. production build와 preview는 기존 strict CSP를 사용하고 `_headers` 정책을 완화하지 않는다.
+- PGlite의 직접 `eval` 예외는 production의 hash 파일 `/assets/pglite.worker-*.js`와 개발의 `/src/runtime/pglite.worker.ts?...` 응답에만 적용한다. document와 다른 Worker에는 적용하지 않는다.
+- 앱은 1280×720, 100% 확대에서 `100dvh` 작업면을 사용한다. document 세로 스크롤 없이 compact toolbar, 280px 가이드 사이드바, 코드·결과 2열, 하단 터미널 Dock을 함께 표시하며 각 긴 내용은 소유한 패널 안에서만 스크롤한다.
+- 가이드를 접으면 48px rail로 줄고 `guideEnabled` session 상태로 복원한다. 1280px 미만에서는 작업면을 밀지 않는 overlay가 되며 작은 화면 또는 높은 확대에서는 clipping보다 document 스크롤과 단일 패널 탐색을 우선한다.
+- 터미널 Dock은 기본 176px, 최소 132px, 최대 320px이다. separator는 pointer drag와 ArrowUp/ArrowDown/Home/End를 지원하고 `PersistedSession.terminalDockHeight`에 선택적으로 저장한다. 누락되거나 범위를 벗어난 값은 기본값 또는 허용 범위로 보정한다.
+- 가이드와 명령 예시는 `onStageCommand`로 터미널 입력값을 채우고 입력창을 선택·focus하지만 실행하지 않는다. 실제 명령은 form submit을 통해 기존 `RUN_COMMAND` 경로로만 실행하며 완료 결과와 짧은 `aria-live` 상태를 Dock에 표시한다.
+- Alembic이 생성하거나 수정한 revision 파일은 계속 자동으로 편집기에 연다. 편집기 최대화는 가이드·결과·터미널을 임시로 숨기고 같은 컴포넌트를 유지해 초안, undo history, 선택 파일과 스크롤 상태를 보존한다. 버튼 또는 Escape로 복원하며 최대화 상태는 session에 저장하지 않는다.
+- SQLite/PostgreSQL workspace 생성은 각각 직접 동작한다. 낮은 빈도의 생성·가져오기·내보내기·초기화·capability 정보는 `Workspace 관리` 메뉴에 모으고 활성 workspace의 실제 DB mode는 toolbar에 별도로 표시한다.

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createLab, type LabClient } from "./store";
+import { createLab, MAX_TERMINAL_DOCK_HEIGHT, MIN_TERMINAL_DOCK_HEIGHT, type LabClient } from "./store";
 import { RuntimeClientError } from "../runtime/runtime-client";
 import type { CommandResult, RuntimeCloneSeed, WorkspaceState } from "../runtime/protocol";
 import type { CheckpointRepository, PersistedSession, WorkspaceCheckpoint } from "../persistence/checkpoints";
@@ -125,7 +125,7 @@ describe("Lab workspace orchestration", () => {
       savedAt: 1234,
     };
     const session: PersistedSession = { formatVersion: 1, workspaceIds: [checkpoint.workspace.id], activeId: checkpoint.workspace.id,
-      panel: "database", guideEnabled: true, activeLesson: "autogenerate" };
+      panel: "database", guideEnabled: true, activeLesson: "autogenerate", terminalDockHeight: 248 };
     const persistence = repository({ session, checkpoints: [checkpoint] });
     const runtime = client();
     vi.mocked(runtime.readFile).mockResolvedValue("restored");
@@ -135,8 +135,20 @@ describe("Lab workspace orchestration", () => {
     await lab.restore();
 
     expect(factory).toHaveBeenCalledWith("sqlite", "sqlite-saved", seed);
-    expect(lab.store.getState()).toMatchObject({ activeId: "sqlite-saved", panel: "database", guideEnabled: true, activeLesson: "autogenerate" });
+    expect(lab.store.getState()).toMatchObject({ activeId: "sqlite-saved", panel: "database", guideEnabled: true, activeLesson: "autogenerate", terminalDockHeight: 248 });
     expect(lab.store.getState().workspaces[0]).toMatchObject({ savedAt: 1234, revision: "saved", drafts: { "models.py": { text: "restored", saved: "restored" } } });
+    lab.dispose();
+  });
+
+  it("clamps and persists the terminal dock height without changing the session format", async () => {
+    const persistence = repository();
+    const lab = createLab(() => client(), persistence);
+    lab.resizeTerminal(999, true);
+    await vi.waitFor(() => expect(persistence.saveSession).toHaveBeenCalled());
+    expect(lab.store.getState().terminalDockHeight).toBe(MAX_TERMINAL_DOCK_HEIGHT);
+    expect(vi.mocked(persistence.saveSession).mock.calls.at(-1)?.[0]).toMatchObject({ formatVersion: 1, terminalDockHeight: MAX_TERMINAL_DOCK_HEIGHT });
+    lab.resizeTerminal(-20);
+    expect(lab.store.getState().terminalDockHeight).toBe(MIN_TERMINAL_DOCK_HEIGHT);
     lab.dispose();
   });
 

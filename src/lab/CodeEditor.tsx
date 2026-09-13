@@ -17,10 +17,12 @@ export function CodeEditor({ path, value, disabled, onChange }: {
   useEffect(() => {
     if (!host.current) return;
     const language = path.endsWith(".py") ? python() : path.endsWith(".sql") ? sql() : StreamLanguage.define(properties);
+    const cspNonce = document.querySelector<HTMLMetaElement>('meta[property="csp-nonce"]')?.nonce;
     const view = new EditorView({ parent: host.current, state: EditorState.create({ doc: value, extensions: [
       basicSetup, language, EditorView.theme({ "&": { height: "100%", minHeight: "0", backgroundColor: "#121713", color: "#e8ecdf" },
         ".cm-scroller": { minHeight: "0", overflow: "auto", fontFamily: "monospace" }, ".cm-gutters": { backgroundColor: "#171e18", color: "#98a692", border: "none" },
         ".cm-content": { caretColor: "#c8f169" }, ".cm-activeLine": { backgroundColor: "#253022" } }, { dark: true }),
+      ...(cspNonce ? [EditorView.cspNonce.of(cspNonce)] : []),
       EditorView.contentAttributes.of({ "aria-label": `코드 편집기 ${path}` }),
       EditorView.updateListener.of((update) => { if (update.docChanged) callback.current(update.state.doc.toString()); }),
     ] }) });

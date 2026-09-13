@@ -6,8 +6,7 @@ async function createWorkspace(page: Page, mode: "SQLite" | "PostgreSQL") {
   page.on("pageerror", (error) => diagnostics.push(`pageerror: ${error.message}`));
   page.on("requestfailed", (request) => diagnostics.push(`requestfailed: ${request.url()} · ${request.failure()?.errorText ?? "unknown"}`));
   await page.goto("/");
-  await page.getByRole("button", { name: `${mode} 환경 선택`, exact: true }).click();
-  await page.getByRole("button", { name: "새 workspace 만들기", exact: true }).click();
+  await page.getByRole("button", { name: `${mode} workspace 만들기`, exact: true }).click();
   const run = page.getByRole("button", { name: "명령 실행", exact: true });
   await page.waitForFunction(() => {
     const button = [...document.querySelectorAll("button")].find((item) => item.textContent === "명령 실행") as HTMLButtonElement | undefined;
@@ -35,19 +34,26 @@ for (const mode of ["SQLite", "PostgreSQL"] as const) {
     await run(page, "alembic upgrade head");
     await page.getByRole("tab", { name: "Schema / Data", exact: true }).click();
     await expect(page.getByTestId("db-version")).toHaveText("persisted1");
+    const separator = page.getByRole("separator", { name: "터미널 높이 조절" });
+    await separator.focus();
+    await page.keyboard.press("End");
+    await expect(separator).toHaveAttribute("aria-valuenow", "320");
+    await page.waitForTimeout(150);
     await page.reload();
     await page.waitForFunction(() => document.querySelector('[role="status"]')?.textContent?.includes("준비됨") || Boolean(document.querySelector(".error-box")), undefined, { timeout: 120_000 });
     if (await page.getByRole("status").first().textContent() === "실행기 중단") throw new Error(`${await page.getByRole("alert").innerText()}\n${diagnostics.join("\n")}`);
     await page.getByRole("tab", { name: "Schema / Data", exact: true }).click();
     await expect(page.getByTestId("db-version")).toHaveText("persisted1");
+    await expect(page.getByRole("separator", { name: "터미널 높이 조절" })).toHaveAttribute("aria-valuenow", "320");
     await page.getByRole("tab", { name: "Revision DAG", exact: true }).click();
     await expect(page.getByRole("list", { name: "Revision 목록" })).toContainText("persisted1");
 
     await page.evaluate(() => window.__revisionLabT8?.crashActive());
-    await expect(page.getByText(/마지막 성공 체크포인트로 자동 복원했습니다/)).toBeVisible({ timeout: 120_000 });
+    await expect(page.getByText(/마지막 성공 체크포인트로 복원했습니다/)).toBeVisible({ timeout: 120_000 });
     await expect(page.getByTestId("db-version")).toHaveText("persisted1");
 
     const downloadPromise = page.waitForEvent("download");
+    await page.getByText("Workspace 관리", { exact: true }).click();
     await page.getByRole("button", { name: "Workspace 내보내기", exact: true }).click();
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toMatch(/\.revision-lab\.zip$/);
