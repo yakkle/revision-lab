@@ -91,4 +91,4 @@ pnpm test:e2e
 
 Graph 노드와 DB current revision을 선택하면 해당 migration 파일이 열린다. DB에 적용되지 않은 head migration은 확인 후 삭제할 수 있으며 적용된 파일이나 자식이 있는 파일은 먼저 downgrade 또는 graph 정리가 필요하다. Ctrl/⌘+S로 파일을 저장하고, 터미널의 위·아래 방향키로 명령 기록을 불러올 수 있다. 가이드의 명령은 터미널 입력창에만 채워지며 **명령 실행**을 눌러야 실제 실행된다. 편집기는 앱 작업면 안에서 최대화할 수 있고 Escape로 복원한다. Workspace 관리와 명령 예시는 바깥을 클릭하거나 Escape를 눌러 닫을 수 있다.
 
-동시에 최대 4개 workspace를 유지한다. 성공한 명령과 저장한 파일, lesson 진행도, 조절한 터미널 높이는 브라우저 IndexedDB의 마지막 성공 체크포인트와 session에 보관되며 새로고침이나 Worker 중단 후 자동 복원된다. 저장하지 않은 편집은 체크포인트 대상이 아니다. **Workspace 관리**의 내보내기로 SQLite/PGlite DB와 파일을 ZIP으로 저장하고, 가져오기에서 Python 파일을 검토한 뒤 별도 workspace로 열 수 있다. 초기화는 확인 후 선택된 workspace의 runtime·DB·체크포인트를 삭제하며, 협업 실습 중에는 연결된 네 workspace를 함께 삭제한다.
+동시에 최대 4개 workspace를 유지한다. 성공한 명령과 저장한 파일, lesson 진행도, 조절한 터미널 높이는 브라우저 IndexedDB의 마지막 성공 체크포인트와 session에 보관되며 새로고침이나 Worker 중단 후 자동 복원된다. 저장하지 않은 편집은 체크포인트 대상이 아니다. **Workspace 관리**의 내보내기로 SQLite/PGlite DB와 파일을 ZIP으로 저장하고, 가져오기에서 Python 파일을 검토한 뒤 별도 workspace로 열 수 있다. 초기화는 파일·DB·체크포인트를 지운 뒤 같은 모드의 새 workspace를 만들고, 삭제는 대체 workspace 없이 완전히 제거한다. 협업 그룹의 초기화·삭제는 연결된 네 workspace를 함께 처리한다.

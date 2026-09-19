@@ -304,7 +304,7 @@ Cloudflare Pages의 정적 `_headers`에 최소 다음 정책을 둔다.
 - 다섯 lesson은 `init`, 수동 revision, upgrade/downgrade, autogenerate 검토, Alice/Bob branch와 merge다. init은 `id`와 `name`을 가진 기본 User metadata와 주석 처리된 `email` 한 줄을 만들고, 수동 revision에서 `users`를 생성·제거한 뒤 autogenerate에서 기존 테이블에 `email`을 추가한다. SQLite와 PostgreSQL에서 같은 정의와 validator를 사용한다.
 - validator는 실제 workspace 파일 존재, `ScriptDirectory` revision graph, Inspector schema, `alembic_version`, 명령 전후 snapshot 전이를 중심으로 판정한다. autogenerate 여부처럼 상태만으로 구분할 수 없는 항목은 runtime이 반환한 구조화된 argv와 실제 생성 revision을 함께 사용하며 특정 파일 본문 문자열에는 의존하지 않는다.
 - init, 미적용 수동 revision, upgrade, downgrade, autogenerate 생성·검토·적용, multiple-head 오류를 관찰한 이력은 현재 탭의 workspace 상태에 유지한다. 이후 DB 상태가 이동해도 이미 확인한 lesson 단계가 취소되지 않는다. T8 전에는 새로고침 후 유지하지 않는다.
-- 협업 실습은 저장하지 않은 편집이 없고 DB current가 하나의 file head인 단일 workspace에서만 시작한다. 원본은 공통 Base가 되고 Alice, Bob, Integration 세 workspace를 추가해 최대 네 runtime을 사용한다.
+- 협업 실습은 저장하지 않은 편집이 없고 DB current가 하나의 file head인 단일 workspace에서만 시작한다. 원본은 공통 Base가 되고 Alice, Bob, Integration 세 workspace를 추가해 최대 네 runtime을 사용한다. 다른 workspace가 있으면 네 runtime 한도와 내보내기·삭제 동선을 함께 안내한다.
 - 내부 clone seed는 T7 세션 복제 전용이다. SQLite는 workspace 텍스트 파일과 최대 32 MiB의 실제 database 파일을 복제한다. PostgreSQL은 같은 파일과 PGlite `dumpDataDir()` 결과를 새 PGlite instance의 `loadDataDir`로 전달한다. 이는 T8의 IndexedDB checkpoint나 `WorkspaceArchiveV1` 공개 import/export 형식을 대신하지 않는다.
 - “PR 파일 합치기”는 공통 base 이후 Alice와 Bob이 만든 revision 파일만 Integration runtime에 저장한다. 각 actor에 하나 이상의 독립 revision이 있어야 하며, 동일 파일 경로는 `REVISION_FILE_CONFLICT`로 중단한다.
 - Integration의 multiple heads, 실패하는 `upgrade head`, 복수 `down_revision`을 가진 merge revision, merge head의 DB current 상태는 모두 실제 Alembic 결과로 판정한다. 같은 revision ID 충돌이나 DDL 충돌도 조용히 해결하지 않고 runtime 오류로 보여준다.
@@ -319,6 +319,7 @@ Cloudflare Pages의 정적 `_headers`에 최소 다음 정책을 둔다.
 - archive는 원래 workspace ID를 신뢰하거나 덮어쓰지 않고 새 workspace ID로 가져온다. mode와 database format이 일치해야 하며 선언되지 않은 ZIP entry, 중복 entry·파일 경로, 절대·상위·역슬래시 경로와 잘못된 UTF-8을 거절한다.
 - ZIP 구현은 필요할 때만 동적으로 로드해 초기 앱 bundle에서 분리한다. 내보내기는 저장하지 않은 편집이 없을 때만 허용한다.
 - reset은 runtime을 닫고 현재 PGlite IDBFS database와 앱 checkpoint를 삭제한 다음 같은 mode의 빈 workspace를 만든다. 협업 그룹이면 네 workspace를 함께 삭제한다.
+- delete는 runtime, 실제 DB와 checkpoint를 제거하고 대체 workspace를 만들지 않는다. 마지막 workspace도 삭제할 수 있으며 협업 그룹의 구성원은 네 workspace를 원자적으로 함께 삭제한다.
 
 ## 13. T8.1 개발 CSP 및 작업면 UX 계약
 

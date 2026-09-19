@@ -23,6 +23,8 @@ const readyCapabilities: capabilityModule.RuntimeCapabilities = {
 describe("App", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    HTMLDialogElement.prototype.showModal = function showModal() { this.open = true; };
+    HTMLDialogElement.prototype.close = function close() { this.open = false; };
   });
 
   it("creates an available PostgreSQL workspace directly", async () => {
@@ -101,6 +103,26 @@ describe("App", () => {
     await user.keyboard("{Escape}");
     expect(commandTrigger).toHaveAttribute("aria-expanded", "false");
     expect(commandTrigger).toHaveFocus();
+  });
+
+  it("confirms permanent workspace deletion and explains how to free collaboration capacity", async () => {
+    vi.spyOn(capabilityModule, "detectRuntimeCapabilities").mockReturnValue(readyCapabilities);
+    const user = userEvent.setup();
+    const lab = createLab();
+    lab.store.setState({ activeId: "second", guideEnabled: true, activeLesson: "collaboration", workspaces: [
+      { id: "first", name: "SQLite 1", mode: "sqlite", drafts: {}, entries: [], changes: [], broken: false, stale: false, evidence: emptyLessonEvidence() },
+      { id: "second", name: "PostgreSQL 2", mode: "postgresql", drafts: {}, entries: [], changes: [], broken: false, stale: false, evidence: emptyLessonEvidence() },
+    ] });
+    const removeWorkspace = vi.spyOn(lab, "removeWorkspace").mockResolvedValue(undefined);
+    render(<App controller={lab} />);
+
+    expect(screen.getByText(/Base, Alice, Bob, Integration의 4개 workspace/)).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Workspace 관리 열기" }));
+    expect(screen.getByRole("button", { name: "Workspace 관리" })).toHaveAttribute("aria-expanded", "true");
+    await user.click(screen.getByRole("button", { name: "Workspace 삭제" }));
+    expect(screen.getByRole("dialog", { name: "Workspace를 삭제할까요?" })).toHaveTextContent("PostgreSQL 2");
+    await user.click(screen.getByRole("button", { name: "Workspace 완전히 삭제" }));
+    expect(removeWorkspace).toHaveBeenCalledOnce();
   });
 
   it("maximizes and restores the editor with the toggle and Escape", async () => {

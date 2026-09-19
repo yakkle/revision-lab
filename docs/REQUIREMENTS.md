@@ -34,6 +34,7 @@ SQLite와 PostgreSQL 모드는 위 기능에 대해 동등한 사용자 경험�
 - `sqlite`와 `postgresql` 중 하나를 선택해 독립 workspace를 만든다.
 - 서로 다른 DB 모드의 파일과 DB 상태를 암묵적으로 공유하지 않는다.
 - workspace를 초기 상태로 reset할 수 있다.
+- workspace를 대체 생성 없이 완전히 삭제할 수 있다. 협업 그룹에 속한 workspace는 그룹 전체를 함께 삭제한다.
 - 마지막 성공 명령과 편집 상태를 IndexedDB 체크포인트로 저장한다.
 - workspace 파일, DB snapshot, 학습 진행도를 버전 지정 ZIP으로 export/import한다.
 - import한 Python 파일은 사용자가 내용을 확인하기 전 자동 실행하지 않는다.

@@ -40,6 +40,7 @@ export default function App({ controller }: { controller?: Lab }) {
   const [openPopover, setOpenPopover] = useState<"workspace" | "commands">();
   const [pendingDeletion, setPendingDeletion] = useState<{ path: string; revision: string }>();
   const resetDialog = useRef<HTMLDialogElement>(null);
+  const removeWorkspaceDialog = useRef<HTMLDialogElement>(null);
   const importDialog = useRef<HTMLDialogElement>(null);
   const deleteDialog = useRef<HTMLDialogElement>(null);
   const importInput = useRef<HTMLInputElement>(null);
@@ -136,6 +137,10 @@ export default function App({ controller }: { controller?: Lab }) {
     document.getElementById("tab-" + panels[next].id)?.focus();
   };
   const closeWorkspaceMenu = () => setOpenPopover((current) => current === "workspace" ? undefined : current);
+  const openWorkspaceMenu = () => {
+    setOpenPopover("workspace");
+    window.requestAnimationFrame(() => workspaceMenuButton.current?.focus());
+  };
   const createWorkspace = (mode: DatabaseMode) => {
     closeWorkspaceMenu();
     void lab.create(mode);
@@ -229,7 +234,8 @@ export default function App({ controller }: { controller?: Lab }) {
           <button disabled={state.busy || !workspace || dirty || workspace.broken} onClick={() => void exportWorkspace()}>Workspace 내보내기</button>
           <button disabled={state.busy || atWorkspaceLimit} onClick={() => { closeWorkspaceMenu(); importInput.current?.click(); }}>Workspace 가져오기</button>
           <details className="environment-details"><summary>이 브라우저의 실습 환경</summary><ul>{capabilities.checks.map((check) => <li key={check.key}>{check.supported ? "✓" : "×"} {check.label} — {check.description}</li>)}</ul></details>
-          {workspace && <><hr /><button className="danger-action" disabled={state.busy} onClick={() => { closeWorkspaceMenu(); resetDialog.current?.showModal(); }}>Workspace 초기화</button></>}
+          {workspace && <><hr /><button className="danger-action" disabled={state.busy} onClick={() => { closeWorkspaceMenu(); resetDialog.current?.showModal(); }}>Workspace 초기화</button>
+            <button className="danger-action" disabled={state.busy} onClick={() => { closeWorkspaceMenu(); removeWorkspaceDialog.current?.showModal(); }}>Workspace 삭제</button></>}
         </div>}
         <input ref={importInput} className="visually-hidden" type="file" accept=".zip,application/zip" aria-label="Workspace archive 파일" onChange={(event) => void chooseArchive(event.target.files?.[0])} />
       </div>
@@ -255,6 +261,7 @@ export default function App({ controller }: { controller?: Lab }) {
       <aside className="guide-sidebar" aria-label="학습 가이드 사이드바">
         <LessonGuide lab={lab} workspace={workspace} workspaces={state.workspaces} collaboration={state.collaboration}
           activeLesson={state.activeLesson} enabled={state.guideEnabled} busy={state.busy} dirty={dirty} onStageCommand={stageCommand}
+          onOpenWorkspaceMenu={openWorkspaceMenu}
           footer={state.guideEnabled ? <LearningNote workspace={workspace} /> : undefined} />
       </aside>
 
@@ -329,6 +336,13 @@ export default function App({ controller }: { controller?: Lab }) {
       <h2 id="reset-title">Workspace를 초기화할까요?</h2>
       <p id="reset-description">{state.collaboration && workspace?.collaborationId === state.collaboration.id ? "협업 실습의 공통 Base, Alice, Bob, Integration" : workspace?.name}의 파일과 DB를 삭제하고 처음부터 시작합니다. 저장하지 않은 편집도 사라지며 복구할 수 없습니다.</p>
       <div><button autoFocus onClick={() => resetDialog.current?.close()}>취소</button><button className="danger-action" onClick={() => { resetDialog.current?.close(); void lab.reset(); }}>파일·DB 삭제 후 초기화</button></div>
+    </dialog>
+    <dialog ref={removeWorkspaceDialog} className="reset-dialog" aria-labelledby="remove-workspace-title" aria-describedby="remove-workspace-description">
+      <h2 id="remove-workspace-title">Workspace를 삭제할까요?</h2>
+      <p id="remove-workspace-description">{state.collaboration && workspace?.collaborationId === state.collaboration.id
+        ? "협업 실습의 공통 Base, Alice, Bob, Integration workspace와 연결된 파일·DB·체크포인트를 모두 삭제합니다."
+        : <><strong>{workspace?.name}</strong> · {workspace?.mode === "postgresql" ? "PostgreSQL" : "SQLite"} workspace의 파일·DB·체크포인트를 삭제합니다.</>}{dirty && " 저장하지 않은 편집도 사라집니다."} 이 작업은 복구할 수 없습니다.</p>
+      <div><button autoFocus onClick={() => removeWorkspaceDialog.current?.close()}>취소</button><button className="danger-action" onClick={() => { removeWorkspaceDialog.current?.close(); void lab.removeWorkspace(); }}>Workspace 완전히 삭제</button></div>
     </dialog>
   </main>;
 }

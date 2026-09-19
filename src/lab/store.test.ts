@@ -42,6 +42,30 @@ describe("Lab workspace orchestration", () => {
     expect(replacement.createWorkspace).toHaveBeenCalledOnce();
     lab.dispose();
   });
+
+  it("removes workspaces without creating replacements and selects the nearest remaining workspace", async () => {
+    const first = client();
+    const second = client();
+    const persistence = repository();
+    const lab = createLab(vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(second), persistence);
+    await lab.create("sqlite");
+    const firstId = lab.store.getState().activeId!;
+    await lab.create("postgresql");
+    const secondId = lab.store.getState().activeId!;
+
+    await lab.removeWorkspace();
+
+    expect(second.close).toHaveBeenCalledOnce();
+    expect(lab.store.getState()).toMatchObject({ activeId: firstId, workspaces: [{ id: firstId }] });
+    expect(persistence.delete).toHaveBeenLastCalledWith([secondId], expect.objectContaining({ workspaceIds: [firstId], activeId: firstId }));
+
+    await lab.removeWorkspace();
+
+    expect(first.close).toHaveBeenCalledOnce();
+    expect(lab.store.getState()).toMatchObject({ activeId: undefined, workspaces: [] });
+    expect(persistence.delete).toHaveBeenLastCalledWith([firstId], expect.objectContaining({ workspaceIds: [], activeId: undefined }));
+    lab.dispose();
+  });
   it("blocks duplicate operations and workspace switching until an operation completes", async () => {
     const runtime = client();
     const lab = createLab(() => runtime);
@@ -239,6 +263,10 @@ describe("Lab workspace orchestration", () => {
     expect(integrationClient.writeFile).toHaveBeenNthCalledWith(2, bobRevision.path, "revision = 'bob'");
     expect(lab.store.getState().collaboration?.filesIntegrated).toBe(true);
     expect(lab.store.getState().activeId).toBe(collaboration.integrationId);
+
+    await lab.removeWorkspace();
+    expect(lab.store.getState()).toMatchObject({ workspaces: [], activeId: undefined, collaboration: undefined });
+    for (const runtime of [source, aliceClient, bobClient, integrationClient]) expect(runtime.close).toHaveBeenCalledOnce();
     lab.dispose();
   });
 });

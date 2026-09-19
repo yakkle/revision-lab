@@ -27,10 +27,11 @@ function collaborationContext(workspaces: Workspace[], collaboration?: Collabora
 }
 
 export function LessonGuide({
-  lab, workspace, workspaces, collaboration, activeLesson, enabled, busy, dirty, onStageCommand, footer,
+  lab, workspace, workspaces, collaboration, activeLesson, enabled, busy, dirty, onStageCommand, onOpenWorkspaceMenu, footer,
 }: {
   lab: Lab; workspace?: Workspace; workspaces: Workspace[]; collaboration?: Collaboration; activeLesson: LessonId;
-  enabled: boolean; busy: boolean; dirty: boolean; onStageCommand: (command: string) => void; footer?: ReactNode;
+  enabled: boolean; busy: boolean; dirty: boolean; onStageCommand: (command: string) => void;
+  onOpenWorkspaceMenu: () => void; footer?: ReactNode;
 }) {
   if (!enabled) {
     return <section className="guide-collapsed" aria-label="학습 가이드">
@@ -78,7 +79,12 @@ export function LessonGuide({
         {!collaboration ? <>
           <p>현재 workspace의 파일과 실제 {workspace?.mode === "postgresql" ? "PGlite DB" : "SQLite DB"}를 세 개의 독립 runtime으로 복제합니다.</p>
           <button className="primary" disabled={busy || dirty || workspaces.length !== 1 || !canCloneCollaborationBase(workspace?.snapshot)} onClick={() => void lab.setupCollaboration()}>공통 base에서 협업 환경 만들기</button>
-          {workspaces.length !== 1 && <span className="warning">협업 실습은 workspace가 하나일 때 시작할 수 있습니다.</span>}
+          {workspaces.length !== 1 && <div className="collaboration-workspace-warning">
+            <span className="warning">{workspaces.length === 0
+              ? "먼저 01~04를 진행할 workspace를 만들고 하나의 current head까지 준비하세요."
+              : "협업 실습은 Base, Alice, Bob, Integration의 4개 workspace를 사용합니다. 다른 workspace를 내보내거나 삭제한 뒤 다시 시도하세요."}</span>
+            <button onClick={onOpenWorkspaceMenu}>Workspace 관리 열기</button>
+          </div>}
           {!canCloneCollaborationBase(workspace?.snapshot) && <span className="hint">revision이 하나의 head이고 DB current가 그 head인 상태가 필요합니다.</span>}
         </> : <>
           <div className="actor-switcher" aria-label="협업 workspace">

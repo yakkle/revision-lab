@@ -129,6 +129,37 @@ ${Array.from({ length: 80 }, (_, index) => `# editor scroll verification line ${
   });
 }
 
+test("deletes workspaces permanently and guides collaboration capacity cleanup", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto("/");
+  await page.getByRole("button", { name: "SQLite workspace 만들기", exact: true }).click();
+  await expect(page.getByRole("button", { name: "명령 실행", exact: true })).toBeEnabled({ timeout: 60_000 });
+  await page.getByRole("button", { name: "Workspace 관리", exact: true }).click();
+  await page.getByRole("button", { name: "SQLite workspace 만들기", exact: true }).click();
+  await expect(page.getByRole("combobox", { name: "Workspace", exact: true }).locator("option")).toHaveCount(2);
+
+  await page.getByRole("button", { name: "학습 가이드 열기" }).click();
+  await page.getByRole("tab", { name: /05 Alice/ }).click();
+  await expect(page.getByText(/Base, Alice, Bob, Integration의 4개 workspace/)).toBeVisible();
+  await page.getByRole("button", { name: "Workspace 관리 열기" }).click();
+  await page.getByRole("button", { name: "Workspace 삭제", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Workspace를 삭제할까요?" })).toContainText("SQLite 2");
+  await page.getByRole("button", { name: "Workspace 완전히 삭제", exact: true }).click();
+  await expect(page.getByRole("combobox", { name: "Workspace", exact: true }).locator("option")).toHaveCount(1);
+  await expect(page.getByRole("status")).toContainText("SQLite 1 준비됨", { timeout: 60_000 });
+  await page.reload();
+  await expect(page.getByRole("combobox", { name: "Workspace", exact: true }).locator("option")).toHaveCount(1, { timeout: 60_000 });
+
+  await page.getByRole("button", { name: "Workspace 관리", exact: true }).click();
+  await page.getByRole("button", { name: "Workspace 삭제", exact: true }).click();
+  await page.getByRole("button", { name: "Workspace 완전히 삭제", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("Workspace를 만들어 실습을 시작하세요.", { timeout: 60_000 });
+  await expect(page.getByText("Workspace 없음", { exact: true })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Workspace", exact: true })).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByText("Workspace 없음", { exact: true })).toBeVisible();
+});
+
 test("wide layout gives the maximized editor the full workbench width", async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
   await page.goto("/");

@@ -284,6 +284,34 @@ export function createLab(
       store.setState({ busy: false });
       await this.create(workspace.mode);
     },
+    async removeWorkspace() {
+      const workspace = active();
+      if (!workspace || store.getState().busy) return;
+      const current = store.getState();
+      const collaboration = current.collaboration;
+      const linked = collaboration && [collaboration.baseId, collaboration.aliceId, collaboration.bobId, collaboration.integrationId].includes(workspace.id)
+        ? new Set([collaboration.baseId, collaboration.aliceId, collaboration.bobId, collaboration.integrationId])
+        : new Set([workspace.id]);
+      const activeIndex = current.workspaces.findIndex((item) => item.id === workspace.id);
+      store.setState({ busy: true, progress: linked.size > 1 ? "협업 workspace와 체크포인트 삭제 중" : "Workspace와 체크포인트 삭제 중" });
+      for (const id of linked) {
+        const client = clients.get(id);
+        try { if (client?.destroy) await client.destroy(); else client?.close(); } catch { client?.close(); }
+        clients.delete(id);
+      }
+      const remaining = store.getState().workspaces.filter((item) => !linked.has(item.id));
+      const next = remaining[Math.min(activeIndex, remaining.length - 1)];
+      store.setState({ workspaces: remaining, activeId: next?.id,
+        collaboration: linked.size > 1 ? undefined : collaboration });
+      try {
+        await enqueuePersistence(() => repository.delete([...linked], session()));
+        store.setState({ progress: remaining.length ? `${workspace.name} 삭제 완료` : "Workspace를 만들어 실습을 시작하세요." });
+      } catch (error) {
+        const fault = persistenceFault(error, "CHECKPOINT_DELETE_FAILED");
+        if (next) patch(next.id, { error: fault });
+        store.setState({ progress: `Workspace 체크포인트를 삭제하지 못했습니다: ${fault.message}` });
+      } finally { store.setState({ busy: false }); }
+    },
     guide(enabled: boolean) { store.setState({ guideEnabled: enabled }); void saveSession(); },
     lesson(lesson: LessonId) { store.setState({ activeLesson: lesson, guideEnabled: true }); void saveSession(); },
     resizeTerminal(height: number, persist = false) {
