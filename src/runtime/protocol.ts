@@ -120,6 +120,7 @@ export type SqliteRuntimeRequest = Envelope & (
   | { type: "RUN_ALEMBIC"; argv: string[] }
   | { type: "READ_FILE"; path: string }
   | { type: "WRITE_FILE"; path: string; content: string }
+  | { type: "DELETE_REVISION"; path: string }
   | { type: "INSPECT" }
 );
 export type SqliteRuntimeReply = Envelope & (
@@ -131,6 +132,7 @@ export type SqliteRuntimeReply = Envelope & (
   | { type: "COMMAND_RESULT"; result: CommandResult }
   | { type: "FILE_CONTENT"; path: string; content: string }
   | { type: "FILE_WRITTEN"; state: WorkspaceState; fileChanges: FileChange[] }
+  | { type: "REVISION_DELETED"; state: WorkspaceState; fileChanges: FileChange[] }
   | { type: "STATE_SNAPSHOT"; state: WorkspaceState }
   | { type: "ERROR"; error: RpcFault }
 );
@@ -239,7 +241,7 @@ export function isSqliteRuntimeRequest(value: unknown): value is SqliteRuntimeRe
     return Array.isArray(value.argv) && value.argv.length > 0 && value.argv.length <= 64 &&
       value.argv.every((item) => typeof item === "string" && item.length > 0 && item.length <= 4096);
   }
-  if (value.type === "READ_FILE") return validPath(value.path);
+  if (value.type === "READ_FILE" || value.type === "DELETE_REVISION") return validPath(value.path);
   return value.type === "WRITE_FILE" && validPath(value.path) &&
     typeof value.content === "string" && new TextEncoder().encode(value.content).length <= 1024 * 1024;
 }
@@ -305,7 +307,7 @@ export function isSqliteRuntimeReply(value: unknown): value is SqliteRuntimeRepl
   if (value.type === "WORKSPACE_CREATED" || value.type === "STATE_SNAPSHOT") return isWorkspaceState(value.state);
   if (value.type === "CLONE_EXPORTED") return isPythonWorkspaceSeed(value.seed);
   if (value.type === "FILE_CONTENT") return typeof value.path === "string" && typeof value.content === "string";
-  if (value.type === "FILE_WRITTEN") return isWorkspaceState(value.state) && isFileChanges(value.fileChanges);
+  if (value.type === "FILE_WRITTEN" || value.type === "REVISION_DELETED") return isWorkspaceState(value.state) && isFileChanges(value.fileChanges);
   return value.type === "COMMAND_RESULT" && isRecord(value.result) && typeof value.result.success === "boolean" &&
     Array.isArray(value.result.argv) && typeof value.result.stdout === "string" && typeof value.result.stderr === "string" &&
     isFileChanges(value.result.fileChanges) && isSchemaDiff(value.result.schemaDiff) &&

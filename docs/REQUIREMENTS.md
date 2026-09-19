@@ -42,6 +42,7 @@ SQLite와 PostgreSQL 모드는 위 기능에 대해 동등한 사용자 경험�
 
 - Alembic 프로젝트에 필요한 디렉터리와 텍스트 파일을 탐색한다.
 - Python, INI, SQL 파일을 CodeMirror에서 편집하고 저장한다.
+- 실제 DB에 적용되지 않은 head revision 파일은 확인 후 삭제할 수 있다. 적용된 revision, 자식이 있는 revision과 일반 파일은 삭제하지 않는다.
 - 명령 실행 후 생성·수정·삭제된 파일을 표시한다.
 - revision 파일의 `revision`, `down_revision`, `branch_labels`, `depends_on`을 Alembic 자체 API로 읽는다. UI가 Python 소스를 임의 정규식으로 해석하지 않는다.
 
@@ -110,4 +111,3 @@ SQLite와 PostgreSQL 모드는 위 기능에 대해 동등한 사용자 경험�
 - PostgreSQL COPY, server-side cursor, 복수 동시 connection
 - 운영 DB의 네트워크 지연, 권한 체계, lock 경쟁, 대용량 데이터 성능 재현
 - import한 프로젝트의 무확인 자동 실행
-

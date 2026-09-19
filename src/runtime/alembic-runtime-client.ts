@@ -13,6 +13,7 @@ type RequestBody =
   | { type: "RUN_ALEMBIC"; argv: string[] }
   | { type: "READ_FILE"; path: string }
   | { type: "WRITE_FILE"; path: string; content: string }
+  | { type: "DELETE_REVISION"; path: string }
   | { type: "INSPECT" };
 
 type PendingRequest = {
@@ -111,6 +112,12 @@ export class AlembicRuntimeClient {
   async writeFile(path: string, content: string): Promise<{ state: WorkspaceState; fileChanges: FileChange[] }> {
     const reply = await this.request({ type: "WRITE_FILE", path, content });
     if (reply.type !== "FILE_WRITTEN") throw this.invalidReply(reply);
+    return { state: reply.state, fileChanges: reply.fileChanges };
+  }
+
+  async deleteRevision(path: string): Promise<{ state: WorkspaceState; fileChanges: FileChange[] }> {
+    const reply = await this.request({ type: "DELETE_REVISION", path });
+    if (reply.type !== "REVISION_DELETED") throw this.invalidReply(reply);
     return { state: reply.state, fileChanges: reply.fileChanges };
   }
 

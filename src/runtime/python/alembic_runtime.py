@@ -75,43 +75,33 @@ else:
     run_migrations_online()
 '''
 
-MODELS_TEMPLATE = '''from sqlalchemy import MetaData
+MODELS_TEMPLATE = '''from sqlalchemy import MetaData, String
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-# 빈 metadata는 manual revision 실습을 그대로 시작할 수 있게 유지합니다.
-metadata = MetaData()
 
-# 자유 실습용 SQLAlchemy 2.x 모델 예제
-#
-# User 테이블로 autogenerate를 연습하려면 위 import와 metadata 두 줄을 지우고,
-# 아래 예제 각 줄의 "# "를 제거한 뒤 파일을 저장하세요.
-#
-# from datetime import datetime
-#
-# from sqlalchemy import DateTime, MetaData, String, func
-# from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-#
-# NAMING_CONVENTION = {
-#     "ix": "ix_%(column_0_label)s",
-#     "uq": "uq_%(table_name)s_%(column_0_name)s",
-#     "pk": "pk_%(table_name)s",
-# }
-#
-# class Base(DeclarativeBase):
-#     metadata = MetaData(naming_convention=NAMING_CONVENTION)
-#
-# class User(Base):
-#     __tablename__ = "users"
-#
-#     id: Mapped[int] = mapped_column(primary_key=True)
-#     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
-#     display_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
-#     created_at: Mapped[datetime] = mapped_column(
-#         DateTime(timezone=True),
-#         server_default=func.now(),
-#         nullable=False,
-#     )
-#
-# metadata = Base.metadata
+NAMING_CONVENTION = {
+    "ix": "ix_%(column_0_label)s",
+    "uq": "uq_%(table_name)s_%(column_0_name)s",
+    "pk": "pk_%(table_name)s",
+}
+
+
+class Base(DeclarativeBase):
+    metadata = MetaData(naming_convention=NAMING_CONVENTION)
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(100))
+
+    # 학습 가이드 04에서 다음 한 줄의 주석을 제거하세요.
+    # email: Mapped[str | None] = mapped_column(String(255), unique=True, index=True)
+
+
+# Revision Lab의 env.py가 읽는 target_metadata입니다.
+metadata = Base.metadata
 '''
 
 
@@ -289,6 +279,31 @@ def _state(root: Path) -> dict[str, Any]:
         "files": files,
         "revisions": _revision_graph(root, set(schema["alembicVersion"])),
         "schema": schema,
+    }
+
+
+def _delete_revision(root: Path, value: str) -> dict[str, Any]:
+    target = _relative_path(root, value)
+    if not target.is_file():
+        raise RuntimeRequestError("REVISION_NOT_FOUND", f"Revision file does not exist: {value}")
+
+    before_state = _state(root)
+    relative = target.relative_to(root).as_posix()
+    revision = next((node for node in before_state["revisions"] if node.get("path") == relative), None)
+    if revision is None:
+        raise RuntimeRequestError("REVISION_NOT_FOUND", f"File is not an Alembic revision: {value}")
+    if revision["revision"] in before_state["schema"]["alembicVersion"]:
+        raise RuntimeRequestError("REVISION_ALREADY_APPLIED", f"Downgrade revision {revision['revision']} before deleting it")
+    if not revision["isHead"]:
+        raise RuntimeRequestError("REVISION_NOT_HEAD", f"Only a revision head can be deleted: {revision['revision']}")
+
+    before_files = _file_manifest(root)
+    target.unlink()
+    after_files = _file_manifest(root)
+    return {
+        "type": "REVISION_DELETED",
+        "state": _state(root),
+        "fileChanges": _file_changes(before_files, after_files),
     }
 
 
@@ -682,6 +697,8 @@ def handle(request_json: str) -> str:
         target.write_text(content, encoding="utf-8")
         after = _file_manifest(root)
         return json.dumps({"type": "FILE_WRITTEN", "state": _state(root), "fileChanges": _file_changes(before, after)})
+    if request_type == "DELETE_REVISION":
+        return json.dumps(_delete_revision(root, request.get("path", "")))
     if request_type == "INSPECT":
         return json.dumps({"type": "STATE_SNAPSHOT", "state": _state(root)})
     raise RuntimeRequestError("RUNTIME_INVALID_REQUEST", f"Unsupported runtime request: {request_type}")

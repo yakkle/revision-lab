@@ -18,6 +18,7 @@ declare global {
       runAlembic: typeof sqliteRuntime.runAlembic;
       readFile: typeof sqliteRuntime.readFile;
       writeFile: typeof sqliteRuntime.writeFile;
+      deleteRevision: typeof sqliteRuntime.deleteRevision;
       inspect: typeof sqliteRuntime.inspect;
       close: typeof sqliteRuntime.close;
     };
@@ -38,6 +39,7 @@ if (import.meta.env.VITE_T5_TEST_HOOK === "1") {
     runAlembic: postgresqlRuntime.runAlembic.bind(postgresqlRuntime),
     readFile: postgresqlRuntime.readFile.bind(postgresqlRuntime),
     writeFile: postgresqlRuntime.writeFile.bind(postgresqlRuntime),
+    deleteRevision: postgresqlRuntime.deleteRevision.bind(postgresqlRuntime),
     inspect: postgresqlRuntime.inspect.bind(postgresqlRuntime),
     close: postgresqlRuntime.close.bind(postgresqlRuntime),
   };
@@ -50,6 +52,7 @@ if (import.meta.env.VITE_T3_TEST_HOOK === "1") {
     runAlembic: sqliteRuntime.runAlembic.bind(sqliteRuntime),
     readFile: sqliteRuntime.readFile.bind(sqliteRuntime),
     writeFile: sqliteRuntime.writeFile.bind(sqliteRuntime),
+    deleteRevision: sqliteRuntime.deleteRevision.bind(sqliteRuntime),
     inspect: sqliteRuntime.inspect.bind(sqliteRuntime),
     close: sqliteRuntime.close.bind(sqliteRuntime),
   };

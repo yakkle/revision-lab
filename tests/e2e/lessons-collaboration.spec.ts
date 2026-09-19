@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { SQLALCHEMY_USER_MODEL_EXAMPLE } from "../../src/lessons/lessons";
+import { MANUAL_USER_MIGRATION_EXAMPLE, SQLALCHEMY_USER_MODEL_EXAMPLE } from "../../src/lessons/lessons";
 
 async function runCommand(page: Page, source: string, success = true) {
   const input = page.getByRole("textbox", { name: "Alembic 명령" });
@@ -34,26 +34,39 @@ for (const mode of ["SQLite", "PostgreSQL"] as const) {
 
     await selectLesson(page, /수동 revision/);
     await runCommand(page, 'alembic revision -m "common base" --rev-id root1');
+    await page.locator(".cm-content").fill(`from alembic import op
+import sqlalchemy as sa
+
+revision = "root1"
+down_revision = None
+branch_labels = None
+depends_on = None
+
+${MANUAL_USER_MIGRATION_EXAMPLE}`);
+    await page.getByRole("button", { name: "파일 저장", exact: true }).click();
     await expect(page.locator(".lesson-checks")).toContainText("3 / 3");
 
     await selectLesson(page, /upgrade와 downgrade/);
     await runCommand(page, "alembic upgrade head");
     await runCommand(page, "alembic downgrade -1");
     await runCommand(page, "alembic upgrade head");
-    await expect(page.locator(".lesson-checks")).toContainText("2 / 2");
+    await expect(page.locator(".lesson-checks")).toContainText("3 / 3");
 
     await page.getByRole("navigation", { name: "Workspace 파일" }).getByRole("button", { name: "models.py", exact: true }).click();
     await page.waitForFunction(() => !document.querySelector(".code-editor")?.hasAttribute("inert"));
+    await expect(page.locator(".cm-content")).toContainText("# email: Mapped[str | None]");
     await page.locator(".cm-content").fill(SQLALCHEMY_USER_MODEL_EXAMPLE);
     await page.getByRole("button", { name: "파일 저장", exact: true }).click();
     await selectLesson(page, /autogenerate 검토/);
-    await runCommand(page, 'alembic revision --autogenerate -m "add users" --rev-id model1');
+    await runCommand(page, 'alembic revision --autogenerate -m "add email" --rev-id model1');
+    await expect(page.locator(".cm-content")).toContainText("add_column");
+    await expect(page.locator(".cm-content")).not.toContainText("create_table");
     await runCommand(page, "alembic upgrade head");
     await expect(page.locator(".lesson-checks")).toContainText("3 / 3");
     await page.getByRole("tab", { name: "Schema / Data", exact: true }).click();
     await page.getByRole("button", { name: "users", exact: true }).click();
     await expect(page.getByRole("table", { name: /컬럼/ })).toContainText("email");
-    await expect(page.getByRole("table", { name: /컬럼/ })).toContainText("created_at");
+    await expect(page.getByRole("table", { name: /컬럼/ })).toContainText("name");
 
     await selectLesson(page, /Alice \/ Bob branch와 merge/);
     await page.getByRole("button", { name: "공통 base에서 협업 환경 만들기" }).click();

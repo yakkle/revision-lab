@@ -15,6 +15,11 @@ for (const mode of ["SQLite", "PostgreSQL"] as const) {
     await expect(page.getByRole("button", { name: "명령 실행", exact: true })).toBeEnabled({ timeout: 100_000 });
     await command(page, "alembic init migrations");
     await expect(page.getByRole("navigation", { name: "Workspace 파일" }).getByRole("button", { name: "models.py", exact: true })).toBeVisible();
+    await command(page, 'alembic revision -m "discard me" --rev-id discard');
+    await page.getByRole("button", { name: "migration 삭제", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Migration 파일 삭제" })).toContainText("discard");
+    await page.getByRole("button", { name: "미적용 migration 삭제", exact: true }).click();
+    await expect(page.getByRole("navigation", { name: "Workspace 파일" }).getByRole("button", { name: /discard/ })).toHaveCount(0);
     await command(page, 'alembic revision -m "create users" --rev-id r1');
     const editor = page.locator(".cm-content");
     await expect(editor).toContainText("revision");
@@ -63,6 +68,7 @@ ${Array.from({ length: 80 }, (_, index) => `# editor scroll verification line ${
     await expect(page.getByRole("tab", { name: "원본 로그", exact: true })).toHaveAttribute("aria-selected", "true");
     await expect(page.getByRole("button", { name: "명령 실행", exact: true })).toBeEnabled({ timeout: 45_000 });
     await expect(page.locator(".terminal-output > div").last()).toContainText("성공");
+    await expect(page.getByRole("button", { name: "migration 삭제", exact: true })).toBeDisabled();
     await page.getByRole("tab", { name: "Schema / Data", exact: true }).click();
     await expect(page.getByTestId("db-version")).toHaveText("r1");
     await page.getByRole("button", { name: "users", exact: true }).click();
@@ -151,4 +157,44 @@ test("narrow layout switches panels using only the keyboard", async ({ page }) =
   await expect(editor).toBeFocused();
   await expect(page.locator("#panel-editor")).toBeVisible();
   await expect(page.locator(".inspector-panel")).toBeHidden();
+});
+
+test("top-level popovers dismiss outside, stay open inside, and restore focus with Escape", async ({ page }) => {
+  await page.goto("/");
+  const workspace = page.getByRole("button", { name: "Workspace 관리", exact: true });
+  const commands = page.getByRole("button", { name: "명령 예시", exact: true });
+
+  await workspace.click();
+  await page.getByText("이 브라우저의 실습 환경", { exact: true }).click();
+  await expect(workspace).toHaveAttribute("aria-expanded", "true");
+  await page.locator(".runtime-bar").click();
+  await expect(workspace).toHaveAttribute("aria-expanded", "false");
+  await commands.click();
+  await expect(commands).toHaveAttribute("aria-expanded", "true");
+
+  const popover = page.locator(".terminal-help");
+  const box = await popover.boundingBox();
+  expect(box).not.toBeNull();
+  expect(box!.y).toBeGreaterThanOrEqual(0);
+  expect(box!.y + box!.height).toBeLessThanOrEqual(await page.evaluate(() => window.innerHeight));
+  await page.locator(".runtime-bar").click();
+  await expect(commands).toHaveAttribute("aria-expanded", "false");
+
+  await commands.click();
+  await page.keyboard.press("Escape");
+  await expect(commands).toHaveAttribute("aria-expanded", "false");
+  await expect(commands).toBeFocused();
+});
+
+test("guide keeps its close control and compact lesson tabs fixed while content scrolls", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "학습 가이드 열기" }).click();
+  await page.getByRole("tab", { name: /02 수동 revision/ }).click();
+  const fixed = page.locator(".lesson-guide-fixed");
+  const before = await fixed.boundingBox();
+  await page.locator(".lesson-scroll").evaluate((element) => { element.scrollTop = element.scrollHeight; });
+  const after = await fixed.boundingBox();
+  expect(after?.y).toBeCloseTo(before!.y, 0);
+  await expect(page.getByRole("button", { name: "가이드 닫기" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: /05 Alice/ })).toBeVisible();
 });

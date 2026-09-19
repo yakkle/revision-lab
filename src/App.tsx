@@ -23,7 +23,7 @@ const panels: Array<{ id: Panel; label: string }> = [
   { id: "editor", label: "파일 / 코드" }, { id: "graph", label: "Revision DAG" },
   { id: "database", label: "Schema / Data" }, { id: "diff", label: "Diff" }, { id: "logs", label: "원본 로그" },
 ];
-const examples = ["alembic init migrations", 'alembic revision -m "create users"', 'alembic revision --autogenerate -m "update models"', "alembic upgrade head", "alembic downgrade -1", "alembic heads", "alembic history"];
+const examples = ["alembic init migrations", 'alembic revision -m "create users"', 'alembic revision --autogenerate -m "add email"', "alembic upgrade head", "alembic downgrade -1", "alembic heads", "alembic history"];
 
 export default function App({ controller }: { controller?: Lab }) {
   const [lab] = useState(() => controller ?? createLab());
@@ -37,10 +37,16 @@ export default function App({ controller }: { controller?: Lab }) {
   const [previewPath, setPreviewPath] = useState<string>();
   const [pythonReviewed, setPythonReviewed] = useState(false);
   const [archiveError, setArchiveError] = useState<string>();
+  const [openPopover, setOpenPopover] = useState<"workspace" | "commands">();
+  const [pendingDeletion, setPendingDeletion] = useState<{ path: string; revision: string }>();
   const resetDialog = useRef<HTMLDialogElement>(null);
   const importDialog = useRef<HTMLDialogElement>(null);
+  const deleteDialog = useRef<HTMLDialogElement>(null);
   const importInput = useRef<HTMLInputElement>(null);
-  const workspaceMenu = useRef<HTMLDetailsElement>(null);
+  const workspaceMenu = useRef<HTMLDivElement>(null);
+  const workspaceMenuButton = useRef<HTMLButtonElement>(null);
+  const commandMenu = useRef<HTMLDivElement>(null);
+  const commandMenuButton = useRef<HTMLButtonElement>(null);
   const commandInput = useRef<HTMLInputElement>(null);
   const terminalOutput = useRef<HTMLDivElement>(null);
   const maximizeButton = useRef<HTMLButtonElement>(null);
@@ -50,6 +56,11 @@ export default function App({ controller }: { controller?: Lab }) {
   const atWorkspaceLimit = state.workspaces.length >= 4;
   const disabled = state.busy || state.restoring || !workspace?.snapshot || Boolean(workspace.broken);
   const latestEntry = workspace?.entries.at(-1);
+  const selectedRevision = workspace?.snapshot?.revisions.find((revision) => revision.path === workspace.file);
+  const deletionBlockedReason = !selectedRevision ? undefined
+    : !selectedRevision.isHead ? "자식 revision이 있어 삭제할 수 없습니다."
+      : selectedRevision.isCurrent || workspace?.snapshot?.schema.alembicVersion.includes(selectedRevision.revision)
+        ? "DB에 적용된 revision입니다. 먼저 downgrade하세요." : undefined;
 
   useEffect(() => {
     void lab.restore();
@@ -69,6 +80,32 @@ export default function App({ controller }: { controller?: Lab }) {
     const dialog = importDialog.current;
     if (pendingArchive && dialog && !dialog.open) dialog.showModal();
   }, [pendingArchive]);
+  useEffect(() => {
+    const dialog = deleteDialog.current;
+    if (pendingDeletion && dialog && !dialog.open) dialog.showModal();
+  }, [pendingDeletion]);
+  useEffect(() => {
+    if (!openPopover) return;
+    const outside = (event: globalThis.PointerEvent) => {
+      const container = openPopover === "workspace" ? workspaceMenu.current : commandMenu.current;
+      if (container?.contains(event.target as Node)) return;
+      setOpenPopover(undefined);
+    };
+    const escape = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      const trigger = openPopover === "workspace" ? workspaceMenuButton.current : commandMenuButton.current;
+      setOpenPopover(undefined);
+      window.requestAnimationFrame(() => trigger?.focus());
+    };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape, { capture: true });
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape, { capture: true });
+    };
+  }, [openPopover]);
   useEffect(() => {
     if (!latestEntry || !terminalOutput.current) return;
     terminalOutput.current.scrollTop = terminalOutput.current.scrollHeight;
@@ -98,7 +135,7 @@ export default function App({ controller }: { controller?: Lab }) {
     lab.panel(panels[next].id);
     document.getElementById("tab-" + panels[next].id)?.focus();
   };
-  const closeWorkspaceMenu = () => { if (workspaceMenu.current) workspaceMenu.current.open = false; };
+  const closeWorkspaceMenu = () => setOpenPopover((current) => current === "workspace" ? undefined : current);
   const createWorkspace = (mode: DatabaseMode) => {
     closeWorkspaceMenu();
     void lab.create(mode);
@@ -124,6 +161,7 @@ export default function App({ controller }: { controller?: Lab }) {
     } finally { if (importInput.current) importInput.current.value = ""; }
   };
   const stageCommand = (source: string) => {
+    setOpenPopover(undefined);
     setCommand(source);
     setHistoryOffset(0);
     setCommandNotice("명령을 터미널에 입력했습니다. 내용을 확인한 뒤 실행하세요.");
@@ -180,9 +218,9 @@ export default function App({ controller }: { controller?: Lab }) {
         {state.workspaces.length > 0 ? <label><span className="visually-hidden">Workspace</span><select aria-label="Workspace" value={state.activeId} disabled={state.busy} onChange={(event) => lab.select(event.target.value)}>{state.workspaces.map((item) => <option key={item.id} value={item.id}>{item.name}{item.broken ? " · 중단됨" : ""}</option>)}</select></label> : <span className="empty-workspace-label">Workspace 없음</span>}
         <span className={`database-badge ${workspace?.mode ?? ""}`}>{workspace ? workspace.mode === "sqlite" ? "SQLite" : "PostgreSQL" : "DB 미연결"}</span>
       </div>
-      <details className="workspace-menu" ref={workspaceMenu}>
-        <summary>Workspace 관리</summary>
-        <div className="workspace-menu-panel">
+      <div className="workspace-menu" ref={workspaceMenu}>
+        <button ref={workspaceMenuButton} className="popover-trigger" aria-label="Workspace 관리" aria-expanded={openPopover === "workspace"} aria-controls="workspace-menu-panel" onClick={() => setOpenPopover((current) => current === "workspace" ? undefined : "workspace")}>Workspace 관리</button>
+        {openPopover === "workspace" && <div className="workspace-menu-panel" id="workspace-menu-panel">
           <strong>새 실습 환경</strong>
           <button disabled={state.busy || state.restoring || !capabilities.sqliteAvailable || atWorkspaceLimit} onClick={() => createWorkspace("sqlite")}>SQLite workspace 만들기</button>
           <button disabled={state.busy || state.restoring || !capabilities.postgresqlAvailable || atWorkspaceLimit} onClick={() => createWorkspace("postgresql")}>PostgreSQL workspace 만들기</button>
@@ -190,11 +228,11 @@ export default function App({ controller }: { controller?: Lab }) {
           <hr />
           <button disabled={state.busy || !workspace || dirty || workspace.broken} onClick={() => void exportWorkspace()}>Workspace 내보내기</button>
           <button disabled={state.busy || atWorkspaceLimit} onClick={() => { closeWorkspaceMenu(); importInput.current?.click(); }}>Workspace 가져오기</button>
-          <input ref={importInput} className="visually-hidden" type="file" accept=".zip,application/zip" aria-label="Workspace archive 파일" onChange={(event) => void chooseArchive(event.target.files?.[0])} />
           <details className="environment-details"><summary>이 브라우저의 실습 환경</summary><ul>{capabilities.checks.map((check) => <li key={check.key}>{check.supported ? "✓" : "×"} {check.label} — {check.description}</li>)}</ul></details>
           {workspace && <><hr /><button className="danger-action" disabled={state.busy} onClick={() => { closeWorkspaceMenu(); resetDialog.current?.showModal(); }}>Workspace 초기화</button></>}
-        </div>
-      </details>
+        </div>}
+        <input ref={importInput} className="visually-hidden" type="file" accept=".zip,application/zip" aria-label="Workspace archive 파일" onChange={(event) => void chooseArchive(event.target.files?.[0])} />
+      </div>
     </header>
 
     <div className="runtime-bar">
@@ -216,15 +254,15 @@ export default function App({ controller }: { controller?: Lab }) {
     <div className="workbench">
       <aside className="guide-sidebar" aria-label="학습 가이드 사이드바">
         <LessonGuide lab={lab} workspace={workspace} workspaces={state.workspaces} collaboration={state.collaboration}
-          activeLesson={state.activeLesson} enabled={state.guideEnabled} busy={state.busy} dirty={dirty} onStageCommand={stageCommand} />
-        {state.guideEnabled && <LearningNote workspace={workspace} />}
+          activeLesson={state.activeLesson} enabled={state.guideEnabled} busy={state.busy} dirty={dirty} onStageCommand={stageCommand}
+          footer={state.guideEnabled ? <LearningNote workspace={workspace} /> : undefined} />
       </aside>
 
       <section className="workbench-main" aria-label="Alembic 작업면">
         <nav className="panel-tabs" role="tablist" aria-label="실습 패널">{panels.map((panel, index) => <button role="tab" id={"tab-" + panel.id} aria-controls={"panel-" + panel.id} aria-selected={state.panel === panel.id} tabIndex={state.panel === panel.id ? 0 : -1} key={panel.id} onClick={() => lab.panel(panel.id)} onKeyDown={(event) => tabKey(event, index)}>{panel.label}</button>)}</nav>
         <div className={`lab-grid showing-${state.panel}`}>
           <section className="panel editor-panel" id="panel-editor" aria-label="파일 / 코드">
-            <div className="panel-heading"><h2>01 / Files</h2><div className="panel-actions"><button disabled={disabled || !draft || draft.text === draft.saved} onClick={() => void lab.save()}>파일 저장</button><button ref={maximizeButton} aria-pressed={editorMaximized} onClick={() => editorMaximized ? restoreEditor() : setEditorMaximized(true)}>{editorMaximized ? "기본 크기로 복원" : "편집기 최대화"}</button></div></div>
+            <div className="panel-heading"><h2>01 / Files</h2><div className="panel-actions"><button disabled={disabled || !draft || draft.text === draft.saved} onClick={() => void lab.save()}>파일 저장</button>{selectedRevision && <button className="danger-action" title={dirty ? "저장하지 않은 편집을 먼저 저장하세요." : deletionBlockedReason} disabled={disabled || dirty || Boolean(deletionBlockedReason)} onClick={() => setPendingDeletion({ path: selectedRevision.path!, revision: selectedRevision.revision })}>migration 삭제</button>}<button ref={maximizeButton} aria-pressed={editorMaximized} onClick={() => editorMaximized ? restoreEditor() : setEditorMaximized(true)}>{editorMaximized ? "기본 크기로 복원" : "편집기 최대화"}</button></div></div>
             <div className="editor-layout"><nav className="file-tree" aria-label="Workspace 파일">
               {!workspace?.snapshot?.files.length && <p className="empty">init 후 파일이 표시됩니다.</p>}
               {workspace?.snapshot?.files.map((path) => <button key={path} disabled={disabled} aria-current={workspace.file === path ? "true" : undefined} onClick={() => void lab.openFile(path)} title={path}>
@@ -250,7 +288,7 @@ export default function App({ controller }: { controller?: Lab }) {
           aria-valuemin={MIN_TERMINAL_DOCK_HEIGHT} aria-valuemax={MAX_TERMINAL_DOCK_HEIGHT} aria-valuenow={state.terminalDockHeight}
           tabIndex={editorMaximized ? -1 : 0} onPointerDown={startTerminalResize} onKeyDown={resizeTerminalWithKeyboard}><span /></div>
         <section className="terminal panel" aria-label="Alembic 터미널">
-          <div className="panel-heading"><h2>03 / Alembic terminal</h2><div className="terminal-actions"><details><summary>명령 예시</summary><div className="terminal-help"><p>예시를 입력한 뒤 실행하세요. pipe, redirection, 외부 shell은 지원하지 않습니다.</p><div className="command-examples">{examples.map((example) => <button key={example} onClick={() => stageCommand(example)}><code>{example}</code></button>)}</div></div></details><button onClick={() => lab.panel("logs")}>전체 원본 로그</button></div></div>
+          <div className="panel-heading"><h2>03 / Alembic terminal</h2><div className="terminal-actions"><div className="command-menu" ref={commandMenu}><button ref={commandMenuButton} className="popover-trigger" aria-expanded={openPopover === "commands"} aria-controls="terminal-command-examples" onClick={() => setOpenPopover((current) => current === "commands" ? undefined : "commands")}>명령 예시</button>{openPopover === "commands" && <div className="terminal-help" id="terminal-command-examples"><p>예시를 입력한 뒤 실행하세요. pipe, redirection, 외부 shell은 지원하지 않습니다.</p><div className="command-examples">{examples.map((example) => <button key={example} onClick={() => stageCommand(example)}><code>{example}</code></button>)}</div></div>}</div><button onClick={() => lab.panel("logs")}>전체 원본 로그</button></div></div>
           <div className="terminal-output" ref={terminalOutput}>{workspace?.entries.slice(-3).map((entry) => <div key={entry.id}><code>$ {entry.command}</code><span className={entry.result?.success ? "success-text" : "error-text"}>{entry.result?.success ? "성공" : "실패"}</span><pre>{entry.result?.stdout || entry.result?.stderr || entry.result?.error?.message || entry.error?.message || "(출력 없음)"}</pre></div>)}</div>
           <span className="visually-hidden" aria-live="polite">{commandNotice}</span>
           {dirty && <p className="command-warning">저장하지 않은 편집이 있습니다. 저장 후 실행하세요.</p>}
@@ -281,6 +319,11 @@ export default function App({ controller }: { controller?: Lab }) {
           setPendingArchive(undefined); setPreviewPath(undefined); setPythonReviewed(false);
           void lab.importArchive(archive);
         }}>확인 후 가져오기</button></div>
+    </dialog>}
+    {pendingDeletion && <dialog ref={deleteDialog} className="reset-dialog" aria-labelledby="delete-title" aria-describedby="delete-description" onCancel={() => setPendingDeletion(undefined)}>
+      <h2 id="delete-title">Migration 파일 삭제</h2>
+      <p id="delete-description"><code>{pendingDeletion.path}</code> · revision <code>{pendingDeletion.revision}</code>을 삭제합니다. 삭제 후 revision graph가 즉시 다시 계산됩니다.</p>
+      <div><button autoFocus onClick={() => setPendingDeletion(undefined)}>취소</button><button className="danger-action" onClick={() => { const target = pendingDeletion.path; setPendingDeletion(undefined); void lab.deleteRevision(target); }}>미적용 migration 삭제</button></div>
     </dialog>}
     <dialog ref={resetDialog} className="reset-dialog" aria-labelledby="reset-title" aria-describedby="reset-description">
       <h2 id="reset-title">Workspace를 초기화할까요?</h2>

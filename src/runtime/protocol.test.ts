@@ -107,6 +107,8 @@ describe("runtime protocol validation", () => {
     expect(isSqliteRuntimeRequest({ ...envelope, type: "RUN_ALEMBIC", argv: "upgrade head" })).toBe(false);
     expect(isSqliteRuntimeRequest({ ...envelope, type: "WRITE_FILE", path: "../escape.py", content: "pass" })).toBe(false);
     expect(isSqliteRuntimeRequest({ ...envelope, type: "WRITE_FILE", path: "models.py", content: "x".repeat(1024 * 1024 + 1) })).toBe(false);
+    expect(isSqliteRuntimeRequest({ ...envelope, type: "DELETE_REVISION", path: "migrations/versions/r1.py" })).toBe(true);
+    expect(isSqliteRuntimeRequest({ ...envelope, type: "DELETE_REVISION", path: "../r1.py" })).toBe(false);
     expect(isSqliteRuntimeRequest({ ...envelope, type: "CREATE_WORKSPACE", seed: {
       files: [{ path: "migrations/versions/base.py", content: "revision = 'base'" }], sqliteDatabase: "AA==",
     } })).toBe(true);

@@ -82,6 +82,7 @@ type RuntimeRequest = ProtocolEnvelope & (
   | { type: "READ_TABLE"; table: string }
   | { type: "READ_FILE"; path: string }
   | { type: "WRITE_FILE"; path: string; content: string }
+  | { type: "DELETE_REVISION"; path: string }
   | { type: "INSPECT" }
   | { type: "SAVE_CHECKPOINT" }
   | { type: "RESTORE_CHECKPOINT"; checkpointId: string }
@@ -209,6 +210,7 @@ SQLSTATE class와 PGlite 오류 정보를 사용해 가능한 가장 구체적�
 - 각 명령 전후에 파일 manifest, revision DAG, DB schema를 읽어 diff를 만든다.
 - `AlembicRuntimeClient(mode, workspaceId?)`와 `alembic_runtime.py`를 두 모드의 공통 실행기로 사용한다. 기존 `SqliteRuntimeClient`는 SQLite 모드를 선택하는 호환 wrapper다.
 - 생성되는 `env.py`는 PostgreSQL에서 dialect의 단일 연결 pool을 사용하고, `render_as_batch`는 SQLite에서만 활성화한다. 성공·실패 모두 engine을 dispose한 다음 실제 DB를 다시 inspect한다.
+- `DELETE_REVISION`은 `ScriptDirectory`가 확인한 미적용 head revision만 삭제한다. 일반 파일은 `REVISION_NOT_FOUND`, 자식이 있는 revision은 `REVISION_NOT_HEAD`, 실제 `alembic_version`에 있는 revision은 `REVISION_ALREADY_APPLIED`로 거절하고, 성공 시 실제 graph와 `deleted` file change를 반환한다.
 - 같은 workspace의 중복 요청은 `RUNTIME_BUSY`로 거절한다. DBAPI 오류의 원본 SQLSTATE/detail/hint를 명령 오류에 보존한다.
 - 성공한 명령과 저장된 편집만 checkpoint 후보가 된다. 실패한 migration의 DB 실제 상태는 별도로 inspect하지만 성공 checkpoint를 덮어쓰지 않는다.
 
@@ -246,7 +248,7 @@ type WorkspaceArchiveV1 = {
 - `ColumnSnapshot.type`은 해당 engine dialect로 compile한 표현을 사용한다. PostgreSQL `TIMESTAMP WITH TIME ZONE`, `JSONB`, `UUID`, `INTEGER[]` 등을 일반 문자열 타입으로 축약하지 않는다.
 - UI store는 선택된 파일, 열린 패널, 실행 중 상태만 소유한다.
 - IndexedDB에는 workspace metadata, checkpoint, lesson progress만 저장한다.
-- 성공한 Alembic 명령, 저장된 파일, 새로 확인한 autogenerate revision 뒤에 파일과 실제 DB를 하나의 checkpoint로 저장한다. 실패한 명령과 저장하지 않은 초안은 마지막 성공 checkpoint를 덮어쓰지 않는다.
+- 성공한 Alembic 명령, 저장·삭제된 revision 파일, 새로 확인한 autogenerate revision 뒤에 파일과 실제 DB를 하나의 checkpoint로 저장한다. 실패한 명령과 저장하지 않은 초안은 마지막 성공 checkpoint를 덮어쓰지 않는다.
 - PGlite dump는 WebKit의 Worker `Blob` 영속화 문제를 피하기 위해 IndexedDB에는 `ArrayBuffer`로 정규화하고 Worker 경계에서만 gzip `Blob`으로 변환한다. 명령 기록은 checkpoint당 최근 20개만 유지한다.
 - archive import 시 format version, 경로 traversal·중복 경로, UTF-8, 암호화·분할·ZIP64, 압축 전후 크기와 파일 개수를 압축 해제 및 runtime 생성 전에 검증한다.
 
@@ -283,6 +285,7 @@ Cloudflare Pages의 정적 `_headers`에 최소 다음 정책을 둔다.
 - 화면의 workspace마다 독립 `AlembicRuntimeClient`를 생성한다. 메모리 사용을 제한하기 위해 동시에 최대 4개를 유지한다. 선택 전환은 기존 파일·DB·편집 초안을 유지한다.
 - Zustand store는 Worker 응답의 snapshot을 표시용으로 보관하며, 선택 파일·revision·테이블·패널과 편집 초안·실행 상태를 관리한다. 성공, graph 또는 DB 상태를 합성하지 않는다.
 - CodeMirror 6에서 Python, SQL, INI 파일을 편집한다. 저장 버튼 또는 Ctrl/⌘+S로 저장한다. 저장하지 않은 초안은 파일 및 workspace 전환에도 유지되며, 초안이 있으면 명령 실행을 차단한다.
+- 편집기에서 선택한 revision이 미적용 file head일 때만 확인 dialog를 거쳐 삭제한다. 삭제 후 Worker의 실제 snapshot으로 파일·graph를 갱신하고 체크포인트를 저장한다.
 - `RUN_COMMAND`는 `alembic`으로 시작하는 문자열을 Python `shlex`로 분리해 기존 Command API allowlist로 전달한다. shell 연산자 및 명령 치환 문자는 실행 전에 거절한다. 상대 revision `downgrade -1`도 지원한다.
 - `PROGRESS`는 초기화·요청 처리 단계를 전달하는 비종결 응답이다. client는 이 메시지로 pending 요청을 완료하거나 실행 잠금을 해제하지 않는다. 진행률을 추정한 백분율은 표시하지 않는다.
 - `RevisionNode.path`는 `ScriptDirectory`의 실제 revision 경로다. graph 노드, 파일 선택, DB current revision 링크가 이 경로로 연결된다. 파일 head와 DB current를 분리하며 branch/merge와 `depends_on` edge도 표시한다.
@@ -298,7 +301,7 @@ Cloudflare Pages의 정적 `_headers`에 최소 다음 정책을 둔다.
 ## 11. T7 교육 흐름과 협업 시뮬레이션 계약
 
 - 가이드 모드와 자유 실습 모드는 같은 `AlembicRuntimeClient`와 `RUN_COMMAND` 경로를 사용한다. 가이드가 migration 결과를 생성하거나 성공 상태를 합성하지 않는다.
-- 다섯 lesson은 `init`, 수동 revision, upgrade/downgrade, autogenerate 검토, Alice/Bob branch와 merge다. SQLite와 PostgreSQL에서 같은 정의와 validator를 사용한다.
+- 다섯 lesson은 `init`, 수동 revision, upgrade/downgrade, autogenerate 검토, Alice/Bob branch와 merge다. init은 `id`와 `name`을 가진 기본 User metadata와 주석 처리된 `email` 한 줄을 만들고, 수동 revision에서 `users`를 생성·제거한 뒤 autogenerate에서 기존 테이블에 `email`을 추가한다. SQLite와 PostgreSQL에서 같은 정의와 validator를 사용한다.
 - validator는 실제 workspace 파일 존재, `ScriptDirectory` revision graph, Inspector schema, `alembic_version`, 명령 전후 snapshot 전이를 중심으로 판정한다. autogenerate 여부처럼 상태만으로 구분할 수 없는 항목은 runtime이 반환한 구조화된 argv와 실제 생성 revision을 함께 사용하며 특정 파일 본문 문자열에는 의존하지 않는다.
 - init, 미적용 수동 revision, upgrade, downgrade, autogenerate 생성·검토·적용, multiple-head 오류를 관찰한 이력은 현재 탭의 workspace 상태에 유지한다. 이후 DB 상태가 이동해도 이미 확인한 lesson 단계가 취소되지 않는다. T8 전에는 새로고침 후 유지하지 않는다.
 - 협업 실습은 저장하지 않은 편집이 없고 DB current가 하나의 file head인 단일 workspace에서만 시작한다. 원본은 공통 Base가 되고 Alice, Bob, Integration 세 workspace를 추가해 최대 네 runtime을 사용한다.
@@ -326,5 +329,6 @@ Cloudflare Pages의 정적 `_headers`에 최소 다음 정책을 둔다.
 - 가이드를 접으면 48px rail로 줄고 `guideEnabled` session 상태로 복원한다. 1280px 미만에서는 작업면을 밀지 않는 overlay가 되며 작은 화면 또는 높은 확대에서는 clipping보다 document 스크롤과 단일 패널 탐색을 우선한다.
 - 터미널 Dock은 기본 176px, 최소 132px, 최대 320px이다. separator는 pointer drag와 ArrowUp/ArrowDown/Home/End를 지원하고 `PersistedSession.terminalDockHeight`에 선택적으로 저장한다. 누락되거나 범위를 벗어난 값은 기본값 또는 허용 범위로 보정한다.
 - 가이드와 명령 예시는 `onStageCommand`로 터미널 입력값을 채우고 입력창을 선택·focus하지만 실행하지 않는다. 실제 명령은 form submit을 통해 기존 `RUN_COMMAND` 경로로만 실행하며 완료 결과와 짧은 `aria-live` 상태를 Dock에 표시한다.
+- 가이드의 닫기와 01~05 압축 탭은 사이드바 상단에 고정하고 선택 lesson 내용만 별도 영역에서 스크롤한다. 명령 예시와 Workspace 관리 팝오버는 토글 재선택·바깥 클릭·Escape로 닫히며, Escape는 토글에 focus를 복원하고 동시에 하나만 열린다. 중첩 disclosure와 modal dialog에는 이 규칙을 적용하지 않는다.
 - Alembic이 생성하거나 수정한 revision 파일은 계속 자동으로 편집기에 연다. 편집기 최대화는 가이드·결과·터미널을 임시로 숨기고 같은 컴포넌트를 유지해 초안, undo history, 선택 파일과 스크롤 상태를 보존한다. 버튼 또는 Escape로 복원하며 최대화 상태는 session에 저장하지 않는다.
 - SQLite/PostgreSQL workspace 생성은 각각 직접 동작한다. 낮은 빈도의 생성·가져오기·내보내기·초기화·capability 정보는 `Workspace 관리` 메뉴에 모으고 활성 workspace의 실제 DB mode는 toolbar에 별도로 표시한다.

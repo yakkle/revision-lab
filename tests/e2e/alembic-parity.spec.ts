@@ -37,9 +37,10 @@ test(`runs the complete ${mode} Alembic command and inspection flow`, async ({ p
     mode === "postgresql" ? "postgresql+pglite://" : "sqlite:///",
   );
   const modelTemplate = await page.evaluate(() => window.__revisionLabT3!.readFile("models.py"));
-  expect(modelTemplate).toContain("# 자유 실습용 SQLAlchemy 2.x 모델 예제");
-  expect(modelTemplate).toContain("# class User(Base):");
-  expect(modelTemplate).toContain("# metadata = Base.metadata");
+  expect(modelTemplate).toContain("class User(Base):");
+  expect(modelTemplate).toContain("name: Mapped[str]");
+  expect(modelTemplate).toContain("# email: Mapped[str | None]");
+  expect(modelTemplate).toContain("metadata = Base.metadata");
   const traversal = await page.evaluate(async () => {
     try {
       await window.__revisionLabT3!.readFile("../outside.py");
@@ -49,6 +50,25 @@ test(`runs the complete ${mode} Alembic command and inspection flow`, async ({ p
     }
   });
   expect(traversal).toMatchObject({ code: "RUNTIME_INVALID_REQUEST" });
+
+  const firstDisposable = await page.evaluate(() => window.__revisionLabT3!.runAlembic(["revision", "-m", "disposable parent", "--rev-id", "discard1"]));
+  const secondDisposable = await page.evaluate(() => window.__revisionLabT3!.runAlembic(["revision", "-m", "disposable head", "--rev-id", "discard2"]));
+  const firstDisposablePath = firstDisposable.fileChanges.find((change) => change.path.includes("/versions/"))!.path;
+  const secondDisposablePath = secondDisposable.fileChanges.find((change) => change.path.includes("/versions/"))!.path;
+  const nonHeadDelete = await page.evaluate(async (path) => {
+    try { await window.__revisionLabT3!.deleteRevision(path); return null; }
+    catch (error) { return (error as { fault?: { code?: string } }).fault ?? null; }
+  }, firstDisposablePath);
+  expect(nonHeadDelete).toMatchObject({ code: "REVISION_NOT_HEAD" });
+  const deletedHead = await page.evaluate((path) => window.__revisionLabT3!.deleteRevision(path), secondDisposablePath);
+  expect(deletedHead.fileChanges).toEqual([{ path: secondDisposablePath, change: "deleted" }]);
+  expect(deletedHead.state.revisions.map((item) => item.revision)).toEqual(["discard1"]);
+  expect((await page.evaluate((path) => window.__revisionLabT3!.deleteRevision(path), firstDisposablePath)).state.revisions).toEqual([]);
+  const ordinaryFileDelete = await page.evaluate(async () => {
+    try { await window.__revisionLabT3!.deleteRevision("models.py"); return null; }
+    catch (error) { return (error as { fault?: { code?: string } }).fault ?? null; }
+  });
+  expect(ordinaryFileDelete).toMatchObject({ code: "REVISION_NOT_FOUND" });
 
   const manual = await page.evaluate(() => window.__revisionLabT3!.runAlembic(["revision", "-m", "create users", "--rev-id", "001"]));
   expect(manual.success, manual.traceback).toBe(true);
@@ -75,6 +95,11 @@ test(`runs the complete ${mode} Alembic command and inspection flow`, async ({ p
     alembicVersion: { before: [], after: ["001"] },
   });
   expect(upgraded.after.schema.tables.find((table) => table.name === "users")?.columns.map((column) => column.name)).toEqual(["id", "name"]);
+  const appliedDelete = await page.evaluate(async (path) => {
+    try { await window.__revisionLabT3!.deleteRevision(path); return null; }
+    catch (error) { return (error as { fault?: { code?: string } }).fault ?? null; }
+  }, manualPath!);
+  expect(appliedDelete).toMatchObject({ code: "REVISION_ALREADY_APPLIED" });
 
   for (const argv of [["current", "--verbose"], ["history", "--verbose"], ["heads"], ["branches"], ["show", "001"]]) {
     const result = await page.evaluate((command) => window.__revisionLabT3!.runAlembic(command), argv);
