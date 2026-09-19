@@ -42,14 +42,20 @@ GitHub repository에서 다음 설정이 필요하다.
 
 GitHub Pages 배포는 정적 SPA와 capability fallback을 검증하는 1차 production 환경이다. SharedArrayBuffer 기반 PostgreSQL runtime의 production 검증 환경은 아니다.
 
-## Cloudflare Pages 이전
+## Cloudflare Pages production
 
 Cloudflare Pages는 `public/_headers`가 build 결과의 `_headers`로 복사되며 정적 응답에 COOP/COEP를 적용한다.
 
+- Production URL: `https://try-alembic.pages.dev/`
+- Project name: `try-alembic`
+- Production branch: `main`
 - Build command: `pnpm build`
 - Build output directory: `dist`
 - Root directory: repository root
+- Framework preset: `None`
 - Environment: mise 또는 Node 24.11.0 / pnpm 11.19.0
+
+Cloudflare Pages의 GitHub 연동이 `main` push를 감지해 자동으로 build하고 production에 배포한다. Direct Upload용 GitHub Actions workflow, Wrangler, Cloudflare API token은 사용하지 않는다.
 
 배포 후 다음을 확인한다.
 
@@ -59,4 +65,6 @@ Cloudflare Pages는 `public/_headers`가 build 결과의 `_headers`로 복사되
 4. 모든 정적 파일이 25MiB 미만이다.
 5. JS/MJS 응답에 `Cache-Control: no-store`가 적용되고, 동일 탭에서 workspace를 두 번 생성하거나 초기화해도 Worker가 정상 동작한다. `public/_headers`의 `/*.js`, `/*.mjs` 규칙이 이 정책을 정의한다.
 
-실제 GitHub 또는 Cloudflare 프로젝트 생성과 배포는 별도 명시적 승인 후 수행한다.
+### Rollback
+
+Cloudflare Dashboard의 `Workers & Pages → try-alembic → Deployments`에서 직전의 성공한 production deployment를 선택해 rollback한다. rollback 후에는 공개 URL의 헤더와 두 DB 모드를 다시 확인한다. 다음 `main` push는 새 production deployment를 만든다.
