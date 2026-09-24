@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { strToU8, zipSync } from "fflate";
-import { createWorkspaceArchive, readWorkspaceArchive, WorkspaceArchiveError, type WorkspaceArchiveV1 } from "./workspace-archive";
+import {
+  createWorkspaceArchive,
+  readWorkspaceArchive,
+  WorkspaceArchiveError,
+  type WorkspaceArchiveV1,
+} from "./workspace-archive";
 
 const archive: WorkspaceArchiveV1 = {
   formatVersion: 1,
@@ -26,12 +31,18 @@ describe("WorkspaceArchiveV1", () => {
 
   it("rejects traversal entries before decompression or Python execution", async () => {
     const malicious = zipSync({ "../escape.py": strToU8("raise SystemExit") });
-    await expect(readWorkspaceArchive(malicious.slice().buffer)).rejects.toMatchObject<Partial<WorkspaceArchiveError>>({ code: "ARCHIVE_INVALID_PATH" });
+    await expect(readWorkspaceArchive(malicious.slice().buffer)).rejects.toMatchObject<Partial<WorkspaceArchiveError>>({
+      code: "ARCHIVE_INVALID_PATH",
+    });
   });
 
   it("rejects a database payload that does not match the workspace mode", async () => {
-    await expect(createWorkspaceArchive({ ...archive, database: { ...archive.database, format: "pglite-datadir" } }))
-      .rejects.toMatchObject<Partial<WorkspaceArchiveError>>({ code: "ARCHIVE_INVALID_DATABASE" });
+    await expect(
+      createWorkspaceArchive({
+        ...archive,
+        database: { ...archive.database, format: "pglite-datadir" },
+      }),
+    ).rejects.toMatchObject<Partial<WorkspaceArchiveError>>({ code: "ARCHIVE_INVALID_DATABASE" });
   });
 
   it("rejects a corrupt manifest that aliases two workspace files to one ZIP entry", async () => {
@@ -50,7 +61,8 @@ describe("WorkspaceArchiveV1", () => {
       "files/shared.txt": strToU8("revision = 'shared'"),
       "database.sqlite": new Uint8Array([83, 81, 76]),
     });
-    await expect(readWorkspaceArchive(corrupt.slice().buffer))
-      .rejects.toMatchObject<Partial<WorkspaceArchiveError>>({ code: "ARCHIVE_INVALID_MANIFEST" });
+    await expect(readWorkspaceArchive(corrupt.slice().buffer)).rejects.toMatchObject<Partial<WorkspaceArchiveError>>({
+      code: "ARCHIVE_INVALID_MANIFEST",
+    });
   });
 });

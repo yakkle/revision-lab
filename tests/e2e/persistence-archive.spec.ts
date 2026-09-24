@@ -2,17 +2,28 @@ import { expect, test, type Page } from "@playwright/test";
 
 async function createWorkspace(page: Page, mode: "SQLite" | "PostgreSQL") {
   const diagnostics: string[] = [];
-  page.on("console", (message) => { if (message.type() === "error" || message.type() === "warning") diagnostics.push(`console:${message.type()}: ${message.text()}`); });
+  page.on("console", (message) => {
+    if (message.type() === "error" || message.type() === "warning")
+      diagnostics.push(`console:${message.type()}: ${message.text()}`);
+  });
   page.on("pageerror", (error) => diagnostics.push(`pageerror: ${error.message}`));
-  page.on("requestfailed", (request) => diagnostics.push(`requestfailed: ${request.url()} · ${request.failure()?.errorText ?? "unknown"}`));
+  page.on("requestfailed", (request) =>
+    diagnostics.push(`requestfailed: ${request.url()} · ${request.failure()?.errorText ?? "unknown"}`),
+  );
   await page.goto("/");
   await page.getByRole("button", { name: `${mode} workspace 만들기`, exact: true }).click();
   const run = page.getByRole("button", { name: "명령 실행", exact: true });
-  await page.waitForFunction(() => {
-    const button = [...document.querySelectorAll("button")].find((item) => item.textContent === "명령 실행") as HTMLButtonElement | undefined;
-    return button?.disabled === false || Boolean(document.querySelector(".error-box"));
-  }, undefined, { timeout: 120_000 });
-  if (await run.isDisabled()) throw new Error(`${await page.getByRole("alert").innerText()}\n\n${diagnostics.join("\n")}`);
+  await page.waitForFunction(
+    () => {
+      const button = [...document.querySelectorAll("button")].find((item) => item.textContent === "명령 실행") as
+        HTMLButtonElement | undefined;
+      return button?.disabled === false || Boolean(document.querySelector(".error-box"));
+    },
+    undefined,
+    { timeout: 120_000 },
+  );
+  if (await run.isDisabled())
+    throw new Error(`${await page.getByRole("alert").innerText()}\n\n${diagnostics.join("\n")}`);
   return diagnostics;
 }
 
@@ -26,7 +37,9 @@ async function run(page: Page, command: string) {
 }
 
 for (const mode of ["SQLite", "PostgreSQL"] as const) {
-  test(`${mode}: reload, forced Worker recovery, and WorkspaceArchiveV1 preserve the real graph and DB`, async ({ page }) => {
+  test(`${mode}: reload, forced Worker recovery, and WorkspaceArchiveV1 preserve the real graph and DB`, async ({
+    page,
+  }) => {
     test.setTimeout(300_000);
     const diagnostics = await createWorkspace(page, mode);
     await run(page, "alembic init migrations");
@@ -40,8 +53,15 @@ for (const mode of ["SQLite", "PostgreSQL"] as const) {
     await expect(separator).toHaveAttribute("aria-valuenow", "320");
     await page.waitForTimeout(150);
     await page.reload();
-    await page.waitForFunction(() => document.querySelector('[role="status"]')?.textContent?.includes("준비됨") || Boolean(document.querySelector(".error-box")), undefined, { timeout: 120_000 });
-    if (await page.getByRole("status").first().textContent() === "실행기 중단") throw new Error(`${await page.getByRole("alert").innerText()}\n${diagnostics.join("\n")}`);
+    await page.waitForFunction(
+      () =>
+        document.querySelector('[role="status"]')?.textContent?.includes("준비됨") ||
+        Boolean(document.querySelector(".error-box")),
+      undefined,
+      { timeout: 120_000 },
+    );
+    if ((await page.getByRole("status").first().textContent()) === "실행기 중단")
+      throw new Error(`${await page.getByRole("alert").innerText()}\n${diagnostics.join("\n")}`);
     await page.getByRole("tab", { name: "Schema / Data", exact: true }).click();
     await expect(page.getByTestId("db-version")).toHaveText("persisted1");
     await expect(page.getByRole("separator", { name: "터미널 높이 조절" })).toHaveAttribute("aria-valuenow", "320");
@@ -49,7 +69,9 @@ for (const mode of ["SQLite", "PostgreSQL"] as const) {
     await expect(page.getByRole("list", { name: "Revision 목록" })).toContainText("persisted1");
 
     await page.evaluate(() => window.__revisionLabT8?.crashActive());
-    await expect(page.getByText(/마지막 성공 체크포인트로 복원했습니다/)).toBeVisible({ timeout: 120_000 });
+    await expect(page.getByText(/마지막 성공 체크포인트로 복원했습니다/)).toBeVisible({
+      timeout: 120_000,
+    });
     await expect(page.getByTestId("db-version")).toHaveText("persisted1");
 
     const downloadPromise = page.waitForEvent("download");
@@ -79,8 +101,13 @@ for (const mode of ["SQLite", "PostgreSQL"] as const) {
 
 test("rejects a traversal ZIP before showing an execution confirmation", async ({ page }) => {
   await page.goto("/");
-  const bytes = Buffer.from("UEsDBAoAAAAAAACAIQAAAAAAAAAAAAAAAAAMABwALi4vZXNjYXBlLnB5VVQJAAPzKdtm8ynbZnV4CwABBOgDAAAE6AMAAFBLAR4DCgAAAAAAAIAhAAAAAAAAAAAAAAAAAAwAGAAAAAAAAQAAAKSBAAAAAC4uL2VzY2FwZS5weVVUBQAD8ynbZnV4CwABBOgDAAAE6AMAAFBLBQYAAAAAAQABAFIAAABGAAAAAAA=", "base64");
-  await page.getByLabel("Workspace archive 파일").setInputFiles({ name: "unsafe.zip", mimeType: "application/zip", buffer: bytes });
+  const bytes = Buffer.from(
+    "UEsDBAoAAAAAAACAIQAAAAAAAAAAAAAAAAAMABwALi4vZXNjYXBlLnB5VVQJAAPzKdtm8ynbZnV4CwABBOgDAAAE6AMAAFBLAR4DCgAAAAAAAIAhAAAAAAAAAAAAAAAAAAwAGAAAAAAAAQAAAKSBAAAAAC4uL2VzY2FwZS5weVVUBQAD8ynbZnV4CwABBOgDAAAE6AMAAFBLBQYAAAAAAQABAFIAAABGAAAAAAA=",
+    "base64",
+  );
+  await page
+    .getByLabel("Workspace archive 파일")
+    .setInputFiles({ name: "unsafe.zip", mimeType: "application/zip", buffer: bytes });
   await expect(page.getByRole("alert")).toContainText("ARCHIVE_IMPORT_REJECTED");
   await expect(page.getByRole("dialog", { name: "외부 workspace 확인" })).toHaveCount(0);
 });

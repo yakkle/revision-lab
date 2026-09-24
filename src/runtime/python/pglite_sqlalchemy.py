@@ -40,7 +40,13 @@ class PGliteDialect(PGDialect):
         return ([], {})
 
     def get_isolation_level_values(self, dbapi_connection):
-        return ("AUTOCOMMIT", "SERIALIZABLE", "READ UNCOMMITTED", "READ COMMITTED", "REPEATABLE READ")
+        return (
+            "AUTOCOMMIT",
+            "SERIALIZABLE",
+            "READ UNCOMMITTED",
+            "READ COMMITTED",
+            "REPEATABLE READ",
+        )
 
     def get_isolation_level(self, dbapi_connection):
         return "AUTOCOMMIT" if dbapi_connection.autocommit else dbapi_connection.isolation_level

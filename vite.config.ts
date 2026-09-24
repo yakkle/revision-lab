@@ -9,10 +9,14 @@ const isolationHeaders = {
   "Referrer-Policy": "no-referrer",
   "X-Content-Type-Options": "nosniff",
 };
-const appCsp = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
+const appCsp =
+  "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
 // PGlite 0.5.8's PostgreSQL WASM dynamic-module loader uses direct eval inside
 // its dedicated Worker. Keep that exception off the document and other assets.
-const pgliteWorkerCsp = appCsp.replace("script-src 'self' 'wasm-unsafe-eval'", "script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval'");
+const pgliteWorkerCsp = appCsp.replace(
+  "script-src 'self' 'wasm-unsafe-eval'",
+  "script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval'",
+);
 
 function developmentCsp(nonce: string): string {
   return appCsp
@@ -45,25 +49,28 @@ export default defineConfig(({ command, isPreview }) => {
   return {
     base: process.env.VITE_BASE_PATH ?? "/",
     html: devNonce ? { cspNonce: devNonce } : undefined,
-    plugins: [react(), {
-      name: "worker-module-cache-policy",
-      configureServer(server) {
-        server.middlewares.use((request, response, next) => {
-          setRuntimeHeaders(request, response, devCsp);
-          response.setHeader("Cache-Control", "no-store");
-          next();
-        });
+    plugins: [
+      react(),
+      {
+        name: "worker-module-cache-policy",
+        configureServer(server) {
+          server.middlewares.use((request, response, next) => {
+            setRuntimeHeaders(request, response, devCsp);
+            response.setHeader("Cache-Control", "no-store");
+            next();
+          });
+        },
+        configurePreviewServer(server) {
+          server.middlewares.use((request, response, next) => {
+            // Apply before sirv's early 304 path as well as normal asset responses.
+            setRuntimeHeaders(request, response);
+            const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
+            if (/\.m?js$/.test(pathname)) response.setHeader("Cache-Control", "no-store");
+            next();
+          });
+        },
       },
-      configurePreviewServer(server) {
-        server.middlewares.use((request, response, next) => {
-          // Apply before sirv's early 304 path as well as normal asset responses.
-          setRuntimeHeaders(request, response);
-          const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
-          if (/\.m?js$/.test(pathname)) response.setHeader("Cache-Control", "no-store");
-          next();
-        });
-      },
-    }],
+    ],
     worker: { format: "es" },
     server: { headers: isolationHeaders },
     preview: { headers: isolationHeaders },

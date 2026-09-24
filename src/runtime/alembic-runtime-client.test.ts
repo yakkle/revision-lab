@@ -19,10 +19,20 @@ class TestWorker extends EventTarget {
   }
 
   respond(request: AlembicRuntimeRequest, workspaceId = request.workspaceId): void {
-    this.dispatchEvent(new MessageEvent("message", { data: {
-      ...request, workspaceId, type: "STATE_SNAPSHOT",
-      state: { files: [], revisions: [], schema: { dialect: "sqlite", tables: [], alembicVersion: [] } },
-    } }));
+    this.dispatchEvent(
+      new MessageEvent("message", {
+        data: {
+          ...request,
+          workspaceId,
+          type: "STATE_SNAPSHOT",
+          state: {
+            files: [],
+            revisions: [],
+            schema: { dialect: "sqlite", tables: [], alembicVersion: [] },
+          },
+        },
+      }),
+    );
   }
 }
 
@@ -42,8 +52,13 @@ describe("Alembic workspace client", () => {
     client.onFailure = vi.fn();
     await client.start();
     TestWorker.instances[0]!.dispatchEvent(new ErrorEvent("error", { message: "idle crash" }));
-    expect(client.onFailure).toHaveBeenCalledWith({ code: "RUNTIME_WORKER_CRASH", message: "idle crash" });
-    await expect(client.inspect()).rejects.toMatchObject({ fault: { code: "RUNTIME_WORKER_CRASH" } });
+    expect(client.onFailure).toHaveBeenCalledWith({
+      code: "RUNTIME_WORKER_CRASH",
+      message: "idle crash",
+    });
+    await expect(client.inspect()).rejects.toMatchObject({
+      fault: { code: "RUNTIME_WORKER_CRASH" },
+    });
   });
   it("delivers progress without resolving or unlocking the pending request", async () => {
     const client = new AlembicRuntimeClient("sqlite", "workspace_1");
@@ -53,7 +68,11 @@ describe("Alembic workspace client", () => {
     await Promise.resolve();
     const worker = TestWorker.instances[0]!;
     const request = worker.requests[0]!;
-    worker.dispatchEvent(new MessageEvent("message", { data: { ...request, type: "PROGRESS", message: "inspecting" } }));
+    worker.dispatchEvent(
+      new MessageEvent("message", {
+        data: { ...request, type: "PROGRESS", message: "inspecting" },
+      }),
+    );
     expect(client.onProgress).toHaveBeenCalledWith("inspecting");
     await expect(client.inspect()).rejects.toMatchObject({ fault: { code: "RUNTIME_BUSY" } });
     worker.respond(request);
@@ -79,11 +98,15 @@ describe("Alembic workspace client", () => {
     const client = new AlembicRuntimeClient("sqlite");
     await client.start();
     const result = client.runAlembic(["upgrade", "head"]);
-    const rejected = expect(result).rejects.toMatchObject({ fault: { code: "ALEMBIC_COMMAND_TIMEOUT" } });
+    const rejected = expect(result).rejects.toMatchObject({
+      fault: { code: "ALEMBIC_COMMAND_TIMEOUT" },
+    });
     await vi.advanceTimersByTimeAsync(30_000);
     await rejected;
     expect(TestWorker.instances[0]!.terminate).toHaveBeenCalledOnce();
-    await expect(client.inspect()).rejects.toMatchObject({ fault: { code: "ALEMBIC_COMMAND_TIMEOUT" } });
+    await expect(client.inspect()).rejects.toMatchObject({
+      fault: { code: "ALEMBIC_COMMAND_TIMEOUT" },
+    });
     expect(TestWorker.instances).toHaveLength(1);
   });
 
@@ -92,7 +115,9 @@ describe("Alembic workspace client", () => {
     await client.start();
     const result = client.inspect();
     await Promise.resolve();
-    const rejected = expect(result).rejects.toMatchObject({ fault: { code: "RUNTIME_WORKER_CRASH", message: "Worker failed" } });
+    const rejected = expect(result).rejects.toMatchObject({
+      fault: { code: "RUNTIME_WORKER_CRASH", message: "Worker failed" },
+    });
     TestWorker.instances[0]!.dispatchEvent(new ErrorEvent("error", { message: "Worker failed" }));
     await rejected;
     expect(TestWorker.instances[0]!.terminate).toHaveBeenCalledOnce();

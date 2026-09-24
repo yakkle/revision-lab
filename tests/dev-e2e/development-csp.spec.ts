@@ -18,7 +18,8 @@ test("loads Vite development mode with a nonce and keeps unsafe-eval scoped to P
 
   const cspErrors: string[] = [];
   page.on("console", (message) => {
-    if (message.type() === "error" && /content security policy|refused to/i.test(message.text())) cspErrors.push(message.text());
+    if (message.type() === "error" && /content security policy|refused to/i.test(message.text()))
+      cspErrors.push(message.text());
   });
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Migration 실습실" })).toBeVisible();
@@ -27,7 +28,10 @@ test("loads Vite development mode with a nonce and keeps unsafe-eval scoped to P
   await expect(run).toBeEnabled({ timeout: 120_000 });
   await run.click();
   await expect(run).toBeEnabled({ timeout: 60_000 });
-  await page.getByRole("navigation", { name: "Workspace 파일" }).getByRole("button", { name: "alembic.ini", exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "Workspace 파일" })
+    .getByRole("button", { name: "alembic.ini", exact: true })
+    .click();
   await expect(page.getByRole("textbox", { name: "코드 편집기 alembic.ini" })).toBeVisible();
   const editorLayout = await page.evaluate(() => {
     const host = document.querySelector<HTMLElement>(".code-editor")!;

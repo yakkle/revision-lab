@@ -20,7 +20,9 @@ for (const mode of ["SQLite", "PostgreSQL"] as const) {
     test.setTimeout(420_000);
     await page.goto("/");
     await page.getByRole("button", { name: `${mode} workspace 만들기`, exact: true }).click();
-    await expect(page.getByRole("button", { name: "명령 실행", exact: true })).toBeEnabled({ timeout: 100_000 });
+    await expect(page.getByRole("button", { name: "명령 실행", exact: true })).toBeEnabled({
+      timeout: 100_000,
+    });
     await page.getByRole("button", { name: "학습 가이드 열기" }).click();
 
     const entriesBefore = await page.locator(".terminal-output > div").count();
@@ -28,7 +30,9 @@ for (const mode of ["SQLite", "PostgreSQL"] as const) {
     await expect(page.getByRole("textbox", { name: "Alembic 명령" })).toBeFocused();
     expect(await page.locator(".terminal-output > div").count()).toBe(entriesBefore);
     await page.getByRole("button", { name: "명령 실행", exact: true }).click();
-    await expect(page.getByRole("button", { name: "명령 실행", exact: true })).toBeEnabled({ timeout: 60_000 });
+    await expect(page.getByRole("button", { name: "명령 실행", exact: true })).toBeEnabled({
+      timeout: 60_000,
+    });
     await expect(page.locator(".terminal-output > div").last()).toContainText("성공");
     await expect(page.locator(".lesson-checks")).toContainText("2 / 2");
 
@@ -52,7 +56,10 @@ ${MANUAL_USER_MIGRATION_EXAMPLE}`);
     await runCommand(page, "alembic upgrade head");
     await expect(page.locator(".lesson-checks")).toContainText("3 / 3");
 
-    await page.getByRole("navigation", { name: "Workspace 파일" }).getByRole("button", { name: "models.py", exact: true }).click();
+    await page
+      .getByRole("navigation", { name: "Workspace 파일" })
+      .getByRole("button", { name: "models.py", exact: true })
+      .click();
     await page.waitForFunction(() => !document.querySelector(".code-editor")?.hasAttribute("inert"));
     await expect(page.locator(".cm-content")).toContainText("# email: Mapped[str | None]");
     await page.locator(".cm-content").fill(SQLALCHEMY_USER_MODEL_EXAMPLE);
@@ -70,12 +77,18 @@ ${MANUAL_USER_MIGRATION_EXAMPLE}`);
 
     await selectLesson(page, /Alice \/ Bob branch와 merge/);
     await page.getByRole("button", { name: "공통 base에서 협업 환경 만들기" }).click();
-    await expect(page.getByRole("button", { name: "Alice branch", exact: true })).toHaveAttribute("aria-pressed", "true", { timeout: 180_000 });
+    await expect(page.getByRole("button", { name: "Alice branch", exact: true })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+      { timeout: 180_000 },
+    );
     await runCommand(page, 'alembic revision -m "Alice change" --rev-id alice');
     await page.getByRole("button", { name: "Bob branch", exact: true }).click();
     await runCommand(page, 'alembic revision -m "Bob change" --rev-id bob');
     await page.getByRole("button", { name: "Alice · Bob PR 파일 합치기" }).click();
-    await expect(page.getByRole("button", { name: "PR 파일 합침 완료" })).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByRole("button", { name: "PR 파일 합침 완료" })).toBeVisible({
+      timeout: 60_000,
+    });
     await expect(page.getByRole("list", { name: "Revision 목록" })).toContainText("alice");
     await expect(page.getByRole("list", { name: "Revision 목록" })).toContainText("bob");
 

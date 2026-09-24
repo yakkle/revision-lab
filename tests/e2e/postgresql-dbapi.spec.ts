@@ -25,8 +25,18 @@ test("runs SQLAlchemy through pglite_dbapi and reflects PostgreSQL constraints",
   });
   expect(report.inspection.uniqueConstraints).toContainEqual(["code"]);
   expect(report.inspection.checkConstraints.some((sql) => sql.includes("score >= 0"))).toBe(true);
-  expect(report.inspection.indexes).toContainEqual({ name: "ix_t4_children_parent_id", columns: ["parent_id"], unique: false });
+  expect(report.inspection.indexes).toContainEqual({
+    name: "ix_t4_children_parent_id",
+    columns: ["parent_id"],
+    unique: false,
+  });
   expect(report.integrityError).toMatchObject({ className: "IntegrityError", sqlState: "23505" });
-  expect(report.unsupportedError).toEqual({ className: "NotSupportedError", code: "DBAPI_NOT_SUPPORTED" });
-  expect(report.secondConnectionError).toEqual({ className: "InterfaceError", code: "DBAPI_SINGLE_CONNECTION" });
+  expect(report.unsupportedError).toEqual({
+    className: "NotSupportedError",
+    code: "DBAPI_NOT_SUPPORTED",
+  });
+  expect(report.secondConnectionError).toEqual({
+    className: "InterfaceError",
+    code: "DBAPI_SINGLE_CONNECTION",
+  });
 });

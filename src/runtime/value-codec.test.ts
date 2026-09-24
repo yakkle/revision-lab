@@ -3,7 +3,10 @@ import { decodeValue, encodeValue } from "./value-codec";
 
 describe("tagged PostgreSQL value codec", () => {
   it("preserves bigint, numeric and bytea without lossy coercion", () => {
-    expect(encodeValue(9_007_199_254_740_993n, 20)).toEqual({ tag: "bigint", value: "9007199254740993" });
+    expect(encodeValue(9_007_199_254_740_993n, 20)).toEqual({
+      tag: "bigint",
+      value: "9007199254740993",
+    });
     expect(encodeValue(123.45, 1700)).toEqual({ tag: "decimal", value: "123.45" });
     const encodedBytes = encodeValue(new Uint8Array([0, 127, 255]));
     expect(encodedBytes).toEqual({ tag: "bytea", value: "AH//" });
@@ -17,7 +20,10 @@ describe("tagged PostgreSQL value codec", () => {
   it("normalizes PostgreSQL int2vector values for SQLAlchemy reflection", () => {
     expect(encodeValue("0 3", 22)).toEqual({
       tag: "array",
-      value: [{ tag: "number", value: 0 }, { tag: "number", value: 3 }],
+      value: [
+        { tag: "number", value: 0 },
+        { tag: "number", value: 3 },
+      ],
     });
   });
 });

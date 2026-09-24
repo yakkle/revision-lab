@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  detectRuntimeCapabilities,
-  type RuntimeProbeSource,
-} from "./detect-runtime-capabilities";
+import { detectRuntimeCapabilities, type RuntimeProbeSource } from "./detect-runtime-capabilities";
 
 const completeEnvironment: RuntimeProbeSource = {
   isSecureContext: true,

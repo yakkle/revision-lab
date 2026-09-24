@@ -31,7 +31,9 @@ test("reflects PostgreSQL types, identity and constraints and autogenerates ALTE
   const init = await page.evaluate(() => window.__revisionLabT5!.runAlembic(["init"]));
   expect(init.success, init.traceback).toBe(true);
   await page.evaluate((content) => window.__revisionLabT5!.writeFile("models.py", content), models(20, true));
-  const generated = await page.evaluate(() => window.__revisionLabT5!.runAlembic(["revision", "--autogenerate", "--rev-id", "pg1", "-m", "create members"]));
+  const generated = await page.evaluate(() =>
+    window.__revisionLabT5!.runAlembic(["revision", "--autogenerate", "--rev-id", "pg1", "-m", "create members"]),
+  );
   expect(generated.success, generated.traceback).toBe(true);
   expect(generated.after.schema.tables).toEqual([]);
   const up = await page.evaluate(() => window.__revisionLabT5!.runAlembic(["upgrade", "head"]));
@@ -39,23 +41,46 @@ test("reflects PostgreSQL types, identity and constraints and autogenerates ALTE
   const members = up.after.schema.tables.find((table) => table.name === "members")!;
   expect(up.after.schema.dialect).toBe("postgresql");
   expect(up.after.schema.alembicVersion).toEqual(["pg1"]);
-  expect(members.columns).toEqual(expect.arrayContaining([
-    expect.objectContaining({ name: "balance", type: "NUMERIC(12, 2)" }),
-    expect.objectContaining({ name: "enabled", type: "BOOLEAN", default: "true" }),
-    expect.objectContaining({ name: "created_at", type: "TIMESTAMP WITH TIME ZONE" }),
-    expect.objectContaining({ name: "public_id", type: "UUID" }),
-    expect.objectContaining({ name: "payload", type: "JSONB" }),
-    expect.objectContaining({ name: "scores", type: "INTEGER[]" }),
-  ]));
+  expect(members.columns).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ name: "balance", type: "NUMERIC(12, 2)" }),
+      expect.objectContaining({ name: "enabled", type: "BOOLEAN", default: "true" }),
+      expect.objectContaining({ name: "created_at", type: "TIMESTAMP WITH TIME ZONE" }),
+      expect.objectContaining({ name: "public_id", type: "UUID" }),
+      expect.objectContaining({ name: "payload", type: "JSONB" }),
+      expect.objectContaining({ name: "scores", type: "INTEGER[]" }),
+    ]),
+  );
   expect(members.primaryKey.columns).toEqual(["id"]);
-  expect(members.foreignKeys).toContainEqual(expect.objectContaining({ name: "fk_members_team", columns: ["team_id"], referredTable: "teams", referredColumns: ["id"] }));
-  expect(members.uniqueConstraints).toContainEqual({ name: "uq_members_label", columns: ["label"] });
-  expect(members.checkConstraints).toContainEqual(expect.objectContaining({ name: "ck_members_balance", sqlText: expect.stringContaining("balance >=") }));
-  expect(members.indexes).toContainEqual({ name: "ix_members_team", columns: ["team_id"], unique: false });
+  expect(members.foreignKeys).toContainEqual(
+    expect.objectContaining({
+      name: "fk_members_team",
+      columns: ["team_id"],
+      referredTable: "teams",
+      referredColumns: ["id"],
+    }),
+  );
+  expect(members.uniqueConstraints).toContainEqual({
+    name: "uq_members_label",
+    columns: ["label"],
+  });
+  expect(members.checkConstraints).toContainEqual(
+    expect.objectContaining({
+      name: "ck_members_balance",
+      sqlText: expect.stringContaining("balance >="),
+    }),
+  );
+  expect(members.indexes).toContainEqual({
+    name: "ix_members_team",
+    columns: ["team_id"],
+    unique: false,
+  });
 
   // Reflection of Identity uses json_build_object and must not produce a
   // spurious identity migration when metadata is unchanged.
-  const noop = await page.evaluate(() => window.__revisionLabT5!.runAlembic(["revision", "--autogenerate", "--rev-id", "pg2"]));
+  const noop = await page.evaluate(() =>
+    window.__revisionLabT5!.runAlembic(["revision", "--autogenerate", "--rev-id", "pg2"]),
+  );
   expect(noop.success, noop.traceback).toBe(true);
   const noopPath = noop.fileChanges.find((file) => file.path.includes("/versions/"))!.path;
   const noopSource = await page.evaluate((path) => window.__revisionLabT5!.readFile(path), noopPath);
@@ -63,7 +88,9 @@ test("reflects PostgreSQL types, identity and constraints and autogenerates ALTE
   expect((await page.evaluate(() => window.__revisionLabT5!.runAlembic(["upgrade", "head"]))).success).toBe(true);
 
   await page.evaluate((content) => window.__revisionLabT5!.writeFile("models.py", content), models(60, false));
-  const altered = await page.evaluate(() => window.__revisionLabT5!.runAlembic(["revision", "--autogenerate", "--rev-id", "pg3"]));
+  const altered = await page.evaluate(() =>
+    window.__revisionLabT5!.runAlembic(["revision", "--autogenerate", "--rev-id", "pg3"]),
+  );
   expect(altered.success, altered.traceback).toBe(true);
   const path = altered.fileChanges.find((file) => file.path.includes("/versions/"))!.path;
   const source = await page.evaluate((file) => window.__revisionLabT5!.readFile(file), path);
@@ -71,11 +98,16 @@ test("reflects PostgreSQL types, identity and constraints and autogenerates ALTE
   expect(source).not.toContain("batch_alter_table");
   const changed = await page.evaluate(() => window.__revisionLabT5!.runAlembic(["upgrade", "head"]));
   expect(changed.success, changed.traceback).toBe(true);
-  expect(changed.schemaDiff.changes).toContainEqual(expect.objectContaining({
-    kind: "column", table: "members", name: "label", change: "modified",
-    before: expect.objectContaining({ type: "VARCHAR(20)", nullable: true }),
-    after: expect.objectContaining({ type: "VARCHAR(60)", nullable: false }),
-  }));
+  expect(changed.schemaDiff.changes).toContainEqual(
+    expect.objectContaining({
+      kind: "column",
+      table: "members",
+      name: "label",
+      change: "modified",
+      before: expect.objectContaining({ type: "VARCHAR(20)", nullable: true }),
+      after: expect.objectContaining({ type: "VARCHAR(60)", nullable: false }),
+    }),
+  );
   const down = await page.evaluate(() => window.__revisionLabT5!.runAlembic(["downgrade", "pg2"]));
   expect(down.success, down.traceback).toBe(true);
   expect(down.after.schema.tables).toEqual(up.after.schema.tables);
@@ -130,7 +162,9 @@ def downgrade():
   expect(failed.schemaDiff.changes).toEqual([]);
   expect(await page.evaluate(() => window.__revisionLabT5!.inspect())).toEqual(failed.after);
 
-  const repaired = migration.slice(0, migration.indexOf("def downgrade():")) + `def downgrade():
+  const repaired =
+    migration.slice(0, migration.indexOf("def downgrade():")) +
+    `def downgrade():
     assert op.get_bind().scalar(sa.text("SELECT count(*) FROM items")) == 1
     op.drop_table("items")
 `;

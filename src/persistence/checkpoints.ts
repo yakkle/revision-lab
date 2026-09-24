@@ -11,8 +11,14 @@ const SESSION_KEY = "current";
 export type WorkspaceCheckpoint = {
   formatVersion: 1;
   workspace: {
-    id: string; name: string; mode: DatabaseMode; evidence: LessonEvidence;
-    role?: Workspace["role"]; collaborationId?: string; file?: string; revision?: string;
+    id: string;
+    name: string;
+    mode: DatabaseMode;
+    evidence: LessonEvidence;
+    role?: Workspace["role"];
+    collaborationId?: string;
+    file?: string;
+    revision?: string;
     entries: Entry[];
   };
   seed: RuntimeCloneSeed;
@@ -60,7 +66,8 @@ function openDatabase(): Promise<IDBDatabase> {
     const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
     request.onupgradeneeded = () => {
       const database = request.result;
-      if (!database.objectStoreNames.contains(CHECKPOINTS)) database.createObjectStore(CHECKPOINTS, { keyPath: "workspace.id" });
+      if (!database.objectStoreNames.contains(CHECKPOINTS))
+        database.createObjectStore(CHECKPOINTS, { keyPath: "workspace.id" });
       if (!database.objectStoreNames.contains(SESSION)) database.createObjectStore(SESSION);
     };
     request.onsuccess = () => resolve(request.result);
@@ -79,7 +86,9 @@ function databaseRepository(): CheckpointRepository {
         transaction.objectStore(CHECKPOINTS).put(checkpoint);
         transaction.objectStore(SESSION).put(session, SESSION_KEY);
         await done;
-      } finally { database.close(); }
+      } finally {
+        database.close();
+      }
     },
     async saveSession(session) {
       const database = await openDatabase();
@@ -88,33 +97,42 @@ function databaseRepository(): CheckpointRepository {
         const done = transactionDone(transaction);
         transaction.objectStore(SESSION).put(session, SESSION_KEY);
         await done;
-      } finally { database.close(); }
+      } finally {
+        database.close();
+      }
     },
     async load() {
       const database = await openDatabase();
       try {
         const transaction = database.transaction([CHECKPOINTS, SESSION], "readonly");
         const done = transactionDone(transaction);
-        const session = await requestValue(transaction.objectStore(SESSION).get(SESSION_KEY)) as PersistedSession | undefined;
+        const session = (await requestValue(transaction.objectStore(SESSION).get(SESSION_KEY))) as
+          PersistedSession | undefined;
         if (!session || session.formatVersion !== 1 || !Array.isArray(session.workspaceIds)) return undefined;
         const checkpoints: WorkspaceCheckpoint[] = [];
         for (const id of session.workspaceIds.slice(0, 4)) {
-          const checkpoint = await requestValue(transaction.objectStore(CHECKPOINTS).get(id)) as WorkspaceCheckpoint | undefined;
+          const checkpoint = (await requestValue(transaction.objectStore(CHECKPOINTS).get(id))) as
+            WorkspaceCheckpoint | undefined;
           if (checkpoint?.formatVersion === 1) checkpoints.push(checkpoint);
         }
         await done;
         return { session, checkpoints };
-      } finally { database.close(); }
+      } finally {
+        database.close();
+      }
     },
     async loadCheckpoint(workspaceId) {
       const database = await openDatabase();
       try {
         const transaction = database.transaction(CHECKPOINTS, "readonly");
         const done = transactionDone(transaction);
-        const checkpoint = await requestValue(transaction.objectStore(CHECKPOINTS).get(workspaceId)) as WorkspaceCheckpoint | undefined;
+        const checkpoint = (await requestValue(transaction.objectStore(CHECKPOINTS).get(workspaceId))) as
+          WorkspaceCheckpoint | undefined;
         await done;
         return checkpoint?.formatVersion === 1 ? checkpoint : undefined;
-      } finally { database.close(); }
+      } finally {
+        database.close();
+      }
     },
     async delete(workspaceIds, session) {
       const database = await openDatabase();
@@ -124,7 +142,9 @@ function databaseRepository(): CheckpointRepository {
         for (const id of workspaceIds) transaction.objectStore(CHECKPOINTS).delete(id);
         transaction.objectStore(SESSION).put(session, SESSION_KEY);
         await done;
-      } finally { database.close(); }
+      } finally {
+        database.close();
+      }
     },
   };
 }
@@ -132,8 +152,11 @@ function databaseRepository(): CheckpointRepository {
 export function createCheckpointRepository(): CheckpointRepository {
   if (typeof indexedDB === "undefined") {
     return {
-      save: async () => undefined, saveSession: async () => undefined, load: async () => undefined,
-      loadCheckpoint: async () => undefined, delete: async () => undefined,
+      save: async () => undefined,
+      saveSession: async () => undefined,
+      load: async () => undefined,
+      loadCheckpoint: async () => undefined,
+      delete: async () => undefined,
     };
   }
   return databaseRepository();

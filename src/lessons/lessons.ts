@@ -8,7 +8,13 @@ export type LessonDefinition = {
   title: string;
   concept: string;
   instructions: string[];
-  example?: { title: string; path?: string; description: string; instruction: string; code: string };
+  example?: {
+    title: string;
+    path?: string;
+    description: string;
+    instruction: string;
+    code: string;
+  };
 };
 
 export type LessonEvidence = {
@@ -88,47 +94,76 @@ def downgrade() -> None:
 
 export const lessons: LessonDefinition[] = [
   {
-    id: "init", number: "01", title: "init과 프로젝트 구조",
+    id: "init",
+    number: "01",
+    title: "init과 프로젝트 구조",
     concept: "Alembic 환경 파일과 실제 DB는 서로 다른 상태입니다.",
-    instructions: ["alembic init migrations를 실행합니다.", "생성된 alembic.ini, env.py, models.py를 파일 패널에서 확인합니다."],
+    instructions: [
+      "alembic init migrations를 실행합니다.",
+      "생성된 alembic.ini, env.py, models.py를 파일 패널에서 확인합니다.",
+    ],
   },
   {
-    id: "manual-revision", number: "02", title: "수동 revision",
+    id: "manual-revision",
+    number: "02",
+    title: "수동 revision",
     concept: "Revision 파일을 만드는 것만으로 DB schema는 바뀌지 않습니다.",
-    instructions: ["alembic revision -m \"create users\"를 실행합니다. Alembic은 의도를 추측하지 않으므로 upgrade()/downgrade()가 빈 파일로 만들어집니다.", "생성된 revision의 두 함수를 아래 코드로 교체해 저장합니다.", "DAG의 새 head와 base 상태의 DB current를 비교합니다."],
+    instructions: [
+      'alembic revision -m "create users"를 실행합니다. Alembic은 의도를 추측하지 않으므로 upgrade()/downgrade()가 빈 파일로 만들어집니다.',
+      "생성된 revision의 두 함수를 아래 코드로 교체해 저장합니다.",
+      "DAG의 새 head와 base 상태의 DB current를 비교합니다.",
+    ],
     example: {
       title: "수동 migration · users 테이블 생성과 제거",
-      description: "생성된 revision 파일의 upgrade()와 downgrade()를 아래 함수로 교체합니다. 파일 위쪽의 revision 식별자와 import는 유지하세요.",
+      description:
+        "생성된 revision 파일의 upgrade()와 downgrade()를 아래 함수로 교체합니다. 파일 위쪽의 revision 식별자와 import는 유지하세요.",
       instruction: "생성된 revision 파일의 두 함수만 교체하세요.",
       code: MANUAL_USER_MIGRATION_EXAMPLE,
     },
   },
   {
-    id: "upgrade-downgrade", number: "03", title: "upgrade와 downgrade",
+    id: "upgrade-downgrade",
+    number: "03",
+    title: "upgrade와 downgrade",
     concept: "alembic_version과 실제 schema가 migration 실행 방향에 따라 함께 이동합니다.",
-    instructions: ["alembic upgrade head로 users 테이블과 DB current를 확인합니다.", "alembic downgrade -1로 테이블이 실제 제거되는지 확인합니다.", "alembic upgrade head를 다시 실행해 다음 단계의 기준 상태를 준비합니다."],
+    instructions: [
+      "alembic upgrade head로 users 테이블과 DB current를 확인합니다.",
+      "alembic downgrade -1로 테이블이 실제 제거되는지 확인합니다.",
+      "alembic upgrade head를 다시 실행해 다음 단계의 기준 상태를 준비합니다.",
+    ],
   },
   {
-    id: "autogenerate", number: "04", title: "autogenerate 검토",
+    id: "autogenerate",
+    number: "04",
+    title: "autogenerate 검토",
     concept: "Autogenerate는 현재 DB와 metadata의 차이를 바탕으로 후보를 만들며, 적용 전 검토가 필요합니다.",
     instructions: [
       "models.py를 열고 User 모델의 email 한 줄에서 주석만 제거합니다.",
       "파일 저장 또는 Ctrl/⌘+S로 변경 내용을 runtime에 저장합니다.",
-      "alembic revision --autogenerate -m \"add email\"을 실행합니다.",
+      'alembic revision --autogenerate -m "add email"을 실행합니다.',
       "생성 파일이 users를 새로 만들지 않고 컬럼과 인덱스를 추가하는지 검토한 뒤 upgrade head로 적용합니다.",
     ],
     example: {
       title: "models.py · email 필드 활성화",
       path: "models.py",
-      description: "init이 만든 기본 User 모델과 수동 migration의 schema는 이미 일치합니다. 다음 한 줄의 '# '만 제거하면 autogenerate가 기존 테이블의 변경을 찾습니다.",
+      description:
+        "init이 만든 기본 User 모델과 수동 migration의 schema는 이미 일치합니다. 다음 한 줄의 '# '만 제거하면 autogenerate가 기존 테이블의 변경을 찾습니다.",
       instruction: "models.py에서 다음 한 줄의 주석만 제거하세요.",
       code: "email: Mapped[str | None] = mapped_column(String(255), unique=True, index=True)",
     },
   },
   {
-    id: "collaboration", number: "05", title: "Alice / Bob branch와 merge",
-    concept: "서로 다른 revision ID도 같은 부모에서 갈라지면 multiple heads가 됩니다. 같은 ID·파일 경로 충돌과는 다르며, merge revision도 DDL 충돌을 대신 해결하지 않습니다.",
-    instructions: ["현재 DB가 하나의 head에 있는 공통 base를 준비합니다.", "Alice/Bob/integration workspace로 복제합니다.", "Alice와 Bob이 각자 revision을 만든 뒤 PR 합치기를 실행합니다.", "integration에서 upgrade head 실패를 확인하고 merge revision을 만든 뒤 다시 upgrade합니다."],
+    id: "collaboration",
+    number: "05",
+    title: "Alice / Bob branch와 merge",
+    concept:
+      "서로 다른 revision ID도 같은 부모에서 갈라지면 multiple heads가 됩니다. 같은 ID·파일 경로 충돌과는 다르며, merge revision도 DDL 충돌을 대신 해결하지 않습니다.",
+    instructions: [
+      "현재 DB가 하나의 head에 있는 공통 base를 준비합니다.",
+      "Alice/Bob/integration workspace로 복제합니다.",
+      "Alice와 Bob이 각자 revision을 만든 뒤 PR 합치기를 실행합니다.",
+      "integration에서 upgrade head 실패를 확인하고 merge revision을 만든 뒤 다시 upgrade합니다.",
+    ],
   },
 ];
 
@@ -156,39 +191,75 @@ function hasTable(state: WorkspaceState, table: string): boolean {
 }
 
 function hasColumn(state: WorkspaceState, table: string, column: string): boolean {
-  return state.schema.tables.some((item) => item.name === table && item.columns.some((itemColumn) => itemColumn.name === column));
+  return state.schema.tables.some(
+    (item) => item.name === table && item.columns.some((itemColumn) => itemColumn.name === column),
+  );
 }
 
 export function recordCommandEvidence(previous: LessonEvidence, result: CommandResult): LessonEvidence {
-  const next: LessonEvidence = { ...previous, autogeneratedRevisions: [...previous.autogeneratedRevisions], reviewedRevisions: [...previous.reviewedRevisions] };
-  const created = result.after.revisions.filter((revision) => !revisionIds(result.before).has(revision.revision)).map((revision) => revision.revision);
+  const next: LessonEvidence = {
+    ...previous,
+    autogeneratedRevisions: [...previous.autogeneratedRevisions],
+    reviewedRevisions: [...previous.reviewedRevisions],
+  };
+  const created = result.after.revisions
+    .filter((revision) => !revisionIds(result.before).has(revision.revision))
+    .map((revision) => revision.revision);
   const command = result.argv[0];
   if (result.success && command === "init" && initialized(result.after)) next.initializedObserved = true;
   if (result.success && command === "revision" && !result.argv.includes("--autogenerate") && created.length > 0) {
     next.manualRevisionCreated = true;
-    if (created.every((revision) => !result.after.schema.alembicVersion.includes(revision))) next.manualUnappliedObserved = true;
+    if (created.every((revision) => !result.after.schema.alembicVersion.includes(revision)))
+      next.manualUnappliedObserved = true;
   }
-  if (result.success && command === "upgrade" && result.before.schema.alembicVersion.join("\0") !== result.after.schema.alembicVersion.join("\0")) next.upgradeObserved = true;
-  if (result.success && command === "downgrade" && result.before.schema.alembicVersion.join("\0") !== result.after.schema.alembicVersion.join("\0")) next.downgradeObserved = true;
-  if (result.success && command === "upgrade" && !hasTable(result.before, "users") && hasTable(result.after, "users")) next.manualUsersUpgradeObserved = true;
-  if (result.success && command === "downgrade" && hasTable(result.before, "users") && !hasTable(result.after, "users")) next.manualUsersDowngradeObserved = true;
+  if (
+    result.success &&
+    command === "upgrade" &&
+    result.before.schema.alembicVersion.join("\0") !== result.after.schema.alembicVersion.join("\0")
+  )
+    next.upgradeObserved = true;
+  if (
+    result.success &&
+    command === "downgrade" &&
+    result.before.schema.alembicVersion.join("\0") !== result.after.schema.alembicVersion.join("\0")
+  )
+    next.downgradeObserved = true;
+  if (result.success && command === "upgrade" && !hasTable(result.before, "users") && hasTable(result.after, "users"))
+    next.manualUsersUpgradeObserved = true;
+  if (result.success && command === "downgrade" && hasTable(result.before, "users") && !hasTable(result.after, "users"))
+    next.manualUsersDowngradeObserved = true;
   if (result.success && command === "revision" && result.argv.includes("--autogenerate") && created.length > 0) {
     next.autogeneratedRevisions = [...new Set([...next.autogeneratedRevisions, ...created])];
-    if (hasTable(result.before, "users") && !hasColumn(result.before, "users", "email")) next.autogenerateBaselineObserved = true;
+    if (hasTable(result.before, "users") && !hasColumn(result.before, "users", "email"))
+      next.autogenerateBaselineObserved = true;
   }
-  if (next.autogeneratedRevisions.some((revision) => result.after.schema.alembicVersion.includes(revision)) && hasColumn(result.after, "users", "email")) next.autogenerateApplied = true;
-  if (!result.success && command === "upgrade" && result.before.revisions.filter((revision) => revision.isHead).length > 1) next.multipleHeadsErrorObserved = true;
+  if (
+    next.autogeneratedRevisions.some((revision) => result.after.schema.alembicVersion.includes(revision)) &&
+    hasColumn(result.after, "users", "email")
+  )
+    next.autogenerateApplied = true;
+  if (
+    !result.success &&
+    command === "upgrade" &&
+    result.before.revisions.filter((revision) => revision.isHead).length > 1
+  )
+    next.multipleHeadsErrorObserved = true;
   return next;
 }
 
 export function recordRevisionReview(previous: LessonEvidence, revision?: string): LessonEvidence {
-  if (!revision || !previous.autogeneratedRevisions.includes(revision) || previous.reviewedRevisions.includes(revision)) return previous;
+  if (!revision || !previous.autogeneratedRevisions.includes(revision) || previous.reviewedRevisions.includes(revision))
+    return previous;
   return { ...previous, reviewedRevisions: [...previous.reviewedRevisions, revision] };
 }
 
 function initialized(state?: WorkspaceState): boolean {
   if (!state) return false;
-  return state.files.includes("alembic.ini") && state.files.includes("models.py") && state.files.some((path) => path.endsWith("/env.py"));
+  return (
+    state.files.includes("alembic.ini") &&
+    state.files.includes("models.py") &&
+    state.files.some((path) => path.endsWith("/env.py"))
+  );
 }
 
 function atSingleHead(state?: WorkspaceState): boolean {
@@ -205,33 +276,87 @@ function actorBranched(actor: LessonWorkspace | undefined, baseRevisions: Set<st
   return Boolean(actor?.snapshot?.revisions.some((revision) => !baseRevisions.has(revision.revision)));
 }
 
-export function assessLesson(id: LessonId, workspace?: LessonWorkspace, collaboration?: CollaborationContext): LessonAssessment {
+export function assessLesson(
+  id: LessonId,
+  workspace?: LessonWorkspace,
+  collaboration?: CollaborationContext,
+): LessonAssessment {
   const snapshot = workspace?.snapshot;
   let steps: LessonStep[];
   if (id === "init") {
     steps = [
-      { id: "environment", label: "실제 Alembic 환경 파일 생성", complete: Boolean(workspace?.evidence.initializedObserved || initialized(snapshot)) },
-      { id: "database", label: "DB와 revision graph를 runtime에서 확인", complete: Boolean(workspace?.evidence.initializedObserved || (initialized(snapshot) && snapshot?.schema.alembicVersion.length === 0)) },
+      {
+        id: "environment",
+        label: "실제 Alembic 환경 파일 생성",
+        complete: Boolean(workspace?.evidence.initializedObserved || initialized(snapshot)),
+      },
+      {
+        id: "database",
+        label: "DB와 revision graph를 runtime에서 확인",
+        complete: Boolean(
+          workspace?.evidence.initializedObserved ||
+          (initialized(snapshot) && snapshot?.schema.alembicVersion.length === 0),
+        ),
+      },
     ];
   } else if (id === "manual-revision") {
     steps = [
-      { id: "revision", label: "수동 revision 생성", complete: Boolean(workspace?.evidence.manualRevisionCreated) },
-      { id: "head", label: "새 file head를 DAG에서 확인", complete: Boolean(snapshot?.revisions.some((revision) => revision.isHead)) },
-      { id: "unapplied", label: "파일 생성과 DB 적용 상태의 차이 확인", complete: Boolean(workspace?.evidence.manualUnappliedObserved ||
-        (snapshot?.revisions.length && snapshot.schema.alembicVersion.length < snapshot.revisions.filter((revision) => revision.isHead).length)) },
+      {
+        id: "revision",
+        label: "수동 revision 생성",
+        complete: Boolean(workspace?.evidence.manualRevisionCreated),
+      },
+      {
+        id: "head",
+        label: "새 file head를 DAG에서 확인",
+        complete: Boolean(snapshot?.revisions.some((revision) => revision.isHead)),
+      },
+      {
+        id: "unapplied",
+        label: "파일 생성과 DB 적용 상태의 차이 확인",
+        complete: Boolean(
+          workspace?.evidence.manualUnappliedObserved ||
+          (snapshot?.revisions.length &&
+            snapshot.schema.alembicVersion.length < snapshot.revisions.filter((revision) => revision.isHead).length),
+        ),
+      },
     ];
   } else if (id === "upgrade-downgrade") {
     steps = [
-      { id: "upgrade", label: "upgrade로 실제 users 테이블 생성", complete: Boolean(workspace?.evidence.manualUsersUpgradeObserved) },
-      { id: "downgrade", label: "downgrade로 실제 users 테이블 제거", complete: Boolean(workspace?.evidence.manualUsersDowngradeObserved) },
-      { id: "ready", label: "다시 head까지 적용해 다음 단계 준비", complete: atSingleHead(snapshot) && Boolean(snapshot && hasTable(snapshot, "users")) },
+      {
+        id: "upgrade",
+        label: "upgrade로 실제 users 테이블 생성",
+        complete: Boolean(workspace?.evidence.manualUsersUpgradeObserved),
+      },
+      {
+        id: "downgrade",
+        label: "downgrade로 실제 users 테이블 제거",
+        complete: Boolean(workspace?.evidence.manualUsersDowngradeObserved),
+      },
+      {
+        id: "ready",
+        label: "다시 head까지 적용해 다음 단계 준비",
+        complete: atSingleHead(snapshot) && Boolean(snapshot && hasTable(snapshot, "users")),
+      },
     ];
   } else if (id === "autogenerate") {
     const generated = workspace?.evidence.autogeneratedRevisions ?? [];
     steps = [
-      { id: "generated", label: "기존 users 변경의 autogenerate revision 생성", complete: generated.length > 0 && Boolean(workspace?.evidence.autogenerateBaselineObserved) },
-      { id: "reviewed", label: "생성된 migration 파일 열어 검토", complete: generated.some((revision) => workspace?.evidence.reviewedRevisions.includes(revision)) },
-      { id: "applied", label: "email 변경을 실제 DB에 적용", complete: Boolean(workspace?.evidence.autogenerateApplied && snapshot && hasColumn(snapshot, "users", "email")) },
+      {
+        id: "generated",
+        label: "기존 users 변경의 autogenerate revision 생성",
+        complete: generated.length > 0 && Boolean(workspace?.evidence.autogenerateBaselineObserved),
+      },
+      {
+        id: "reviewed",
+        label: "생성된 migration 파일 열어 검토",
+        complete: generated.some((revision) => workspace?.evidence.reviewedRevisions.includes(revision)),
+      },
+      {
+        id: "applied",
+        label: "email 변경을 실제 DB에 적용",
+        complete: Boolean(workspace?.evidence.autogenerateApplied && snapshot && hasColumn(snapshot, "users", "email")),
+      },
     ];
   } else {
     const base = new Set(collaboration?.baseRevisions ?? []);
@@ -240,13 +365,41 @@ export function assessLesson(id: LessonId, workspace?: LessonWorkspace, collabor
     const heads = integrationState?.revisions.filter((revision) => revision.isHead) ?? [];
     const merge = integrationState?.revisions.find((revision) => revision.isMergePoint);
     steps = [
-      { id: "base", label: "하나의 current head를 공통 base로 준비", complete: Boolean(collaboration) || canCloneCollaborationBase(snapshot) },
-      { id: "cloned", label: "Alice · Bob · integration을 같은 base에서 복제", complete: Boolean(collaboration?.alice && collaboration.bob && integration) },
-      { id: "branches", label: "Alice와 Bob이 독립 revision 생성", complete: actorBranched(collaboration?.alice, base) && actorBranched(collaboration?.bob, base) },
-      { id: "heads", label: "PR 합치기 후 실제 multiple heads 확인", complete: Boolean(collaboration?.filesIntegrated && (collaboration.multipleHeadsObserved || heads.length > 1)) },
-      { id: "error", label: "integration의 실제 upgrade head 오류 확인", complete: Boolean(integration?.evidence.multipleHeadsErrorObserved) },
-      { id: "merge", label: "복수 down_revision의 실제 merge revision 생성", complete: Boolean(merge && merge.downRevisions.length > 1) },
-      { id: "resolved", label: "merge head까지 실제 DB upgrade", complete: Boolean(merge?.isCurrent && integrationState?.schema.alembicVersion.includes(merge.revision)) },
+      {
+        id: "base",
+        label: "하나의 current head를 공통 base로 준비",
+        complete: Boolean(collaboration) || canCloneCollaborationBase(snapshot),
+      },
+      {
+        id: "cloned",
+        label: "Alice · Bob · integration을 같은 base에서 복제",
+        complete: Boolean(collaboration?.alice && collaboration.bob && integration),
+      },
+      {
+        id: "branches",
+        label: "Alice와 Bob이 독립 revision 생성",
+        complete: actorBranched(collaboration?.alice, base) && actorBranched(collaboration?.bob, base),
+      },
+      {
+        id: "heads",
+        label: "PR 합치기 후 실제 multiple heads 확인",
+        complete: Boolean(collaboration?.filesIntegrated && (collaboration.multipleHeadsObserved || heads.length > 1)),
+      },
+      {
+        id: "error",
+        label: "integration의 실제 upgrade head 오류 확인",
+        complete: Boolean(integration?.evidence.multipleHeadsErrorObserved),
+      },
+      {
+        id: "merge",
+        label: "복수 down_revision의 실제 merge revision 생성",
+        complete: Boolean(merge && merge.downRevisions.length > 1),
+      },
+      {
+        id: "resolved",
+        label: "merge head까지 실제 DB upgrade",
+        complete: Boolean(merge?.isCurrent && integrationState?.schema.alembicVersion.includes(merge.revision)),
+      },
     ];
   }
   return { complete: steps.every((step) => step.complete), steps };

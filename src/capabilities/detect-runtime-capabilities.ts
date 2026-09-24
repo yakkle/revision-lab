@@ -1,10 +1,5 @@
 export type CapabilityKey =
-  | "secureContext"
-  | "crossOriginIsolated"
-  | "sharedArrayBuffer"
-  | "worker"
-  | "webAssembly"
-  | "indexedDb";
+  "secureContext" | "crossOriginIsolated" | "sharedArrayBuffer" | "worker" | "webAssembly" | "indexedDb";
 
 export type CapabilityCheck = {
   key: CapabilityKey;
@@ -87,9 +82,7 @@ export function detectRuntimeCapabilities(
     "webAssembly",
     "indexedDb",
   ];
-  const postgresqlBlockers = postgresqlRequired
-    .filter((key) => !byKey[key])
-    .map((key) => labels[key].label);
+  const postgresqlBlockers = postgresqlRequired.filter((key) => !byKey[key]).map((key) => labels[key].label);
 
   return {
     checks,

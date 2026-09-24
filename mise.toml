@@ -1,6 +1,7 @@
 [tools]
 "npm:pnpm" = "11.19.0"
 node = "24.11.0"
+ruff = "0.15.4"
 
 [env]
 MISE_PROJECT_ROOT = "{{ config_root }}"

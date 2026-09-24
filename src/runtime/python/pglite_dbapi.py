@@ -289,10 +289,11 @@ class Cursor:
     def _apply(self, result: Mapping[str, Any]) -> None:
         fields = result.get("fields") or []
         rows = result.get("rows") or []
-        self.description = tuple(
-            (str(field["name"]), int(field["dataTypeId"]), None, None, None, None, None)
-            for field in fields
-        ) if fields else None
+        self.description = (
+            tuple((str(field["name"]), int(field["dataTypeId"]), None, None, None, None, None) for field in fields)
+            if fields
+            else None
+        )
         self._rows = [tuple(_decode(value) for value in row) for row in rows]
         self._offset = 0
         self.rowcount = int(result.get("rowCount", -1))

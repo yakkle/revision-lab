@@ -1,7 +1,9 @@
 import { expect, test } from "@playwright/test";
 import { readdir } from "node:fs/promises";
 
-test("keeps unsafe-eval out of the document CSP and scopes the PGlite exception to its Worker asset", async ({ request }) => {
+test("keeps unsafe-eval out of the document CSP and scopes the PGlite exception to its Worker asset", async ({
+  request,
+}) => {
   const document = await request.get("/");
   const documentCsp = document.headers()["content-security-policy"];
   expect(documentCsp).toContain("script-src 'self' 'wasm-unsafe-eval'");
@@ -19,7 +21,9 @@ test("keeps module responses out of the WebKit cache without disabling WASM cach
   expect(script.status()).toBe(200);
   expect(script.headers()["cache-control"]).toBe("no-store");
   expect(script.headers()["cross-origin-resource-policy"]).toBe("same-origin");
-  const revalidated = await request.head("/runtime/pyodide/pyodide.mjs", { headers: { "If-None-Match": script.headers().etag! } });
+  const revalidated = await request.head("/runtime/pyodide/pyodide.mjs", {
+    headers: { "If-None-Match": script.headers().etag! },
+  });
   expect(revalidated.status()).toBe(304);
   expect(revalidated.headers()["cross-origin-embedder-policy"]).toBe("require-corp");
   const wasm = await request.head("/runtime/pyodide/pyodide.asm.wasm");

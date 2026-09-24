@@ -1,6 +1,16 @@
 import type { TaggedValue } from "./protocol";
 
-const OID = { bytea: 17, int8: 20, int2Vector: 22, date: 1082, time: 1083, timestamp: 1114, timestampTz: 1184, timeTz: 1266, numeric: 1700 };
+const OID = {
+  bytea: 17,
+  int8: 20,
+  int2Vector: 22,
+  date: 1082,
+  time: 1083,
+  timestamp: 1114,
+  timestampTz: 1184,
+  timeTz: 1266,
+  numeric: 1700,
+};
 
 function toBase64(value: Uint8Array): string {
   let binary = "";
@@ -20,13 +30,32 @@ export function encodeValue(value: unknown, dataTypeId?: number): TaggedValue {
   if (Array.isArray(value)) return { tag: "array", value: value.map((item) => encodeValue(item)) };
   if (value instanceof Uint8Array) return { tag: "bytea", value: toBase64(value) };
   if (dataTypeId === OID.int2Vector && typeof value === "string") {
-    return { tag: "array", value: value.trim() === "" ? [] : value.trim().split(/\s+/).map((item) => ({ tag: "number", value: Number(item) })) };
+    return {
+      tag: "array",
+      value:
+        value.trim() === ""
+          ? []
+          : value
+              .trim()
+              .split(/\s+/)
+              .map((item) => ({ tag: "number", value: Number(item) })),
+    };
   }
   if (dataTypeId === OID.int8) return { tag: "bigint", value: String(value) };
   if (dataTypeId === OID.numeric) return { tag: "decimal", value: String(value) };
-  if (dataTypeId === OID.date) return { tag: "date", value: value instanceof Date ? value.toISOString().slice(0, 10) : String(value), dataTypeId };
+  if (dataTypeId === OID.date)
+    return {
+      tag: "date",
+      value: value instanceof Date ? value.toISOString().slice(0, 10) : String(value),
+      dataTypeId,
+    };
   if (dataTypeId === OID.time || dataTypeId === OID.timeTz) return { tag: "time", value: String(value), dataTypeId };
-  if (dataTypeId === OID.timestamp || dataTypeId === OID.timestampTz) return { tag: "timestamp", value: value instanceof Date ? value.toISOString() : String(value), dataTypeId };
+  if (dataTypeId === OID.timestamp || dataTypeId === OID.timestampTz)
+    return {
+      tag: "timestamp",
+      value: value instanceof Date ? value.toISOString() : String(value),
+      dataTypeId,
+    };
   if (value instanceof Date) return { tag: "timestamp", value: value.toISOString(), dataTypeId: OID.timestampTz };
   if (typeof value === "boolean") return { tag: "boolean", value };
   if (typeof value === "bigint") return { tag: "bigint", value: value.toString() };
@@ -46,12 +75,24 @@ export function encodeValue(value: unknown, dataTypeId?: number): TaggedValue {
 
 export function decodeValue(value: TaggedValue): unknown {
   switch (value.tag) {
-    case "null": return null;
-    case "boolean": case "number": case "string": return value.value;
-    case "bigint": return BigInt(value.value);
-    case "decimal": case "date": case "time": case "timestamp": return value.value;
-    case "bytea": return fromBase64(value.value);
-    case "array": return value.value.map(decodeValue);
-    case "special-number": return value.value === "NaN" ? NaN : value.value === "Infinity" ? Infinity : -Infinity;
+    case "null":
+      return null;
+    case "boolean":
+    case "number":
+    case "string":
+      return value.value;
+    case "bigint":
+      return BigInt(value.value);
+    case "decimal":
+    case "date":
+    case "time":
+    case "timestamp":
+      return value.value;
+    case "bytea":
+      return fromBase64(value.value);
+    case "array":
+      return value.value.map(decodeValue);
+    case "special-number":
+      return value.value === "NaN" ? NaN : value.value === "Infinity" ? Infinity : -Infinity;
   }
 }

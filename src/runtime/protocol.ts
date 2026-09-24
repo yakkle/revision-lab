@@ -17,12 +17,35 @@ export type TaggedValue =
   | { tag: "date" | "time" | "timestamp"; value: string; dataTypeId: number }
   | { tag: "bytea"; value: string }
   | { tag: "array"; value: TaggedValue[] };
-export type RpcFault = { code: string; message: string; sqlState?: string; detail?: string; hint?: string; traceback?: string };
+export type RpcFault = {
+  code: string;
+  message: string;
+  sqlState?: string;
+  detail?: string;
+  hint?: string;
+  traceback?: string;
+};
 export type PgResult =
-  | { ok: true; rows: TaggedValue[][]; fields: Array<{ name: string; dataTypeId: number }>; rowCount: number; commandTag?: string }
+  | {
+      ok: true;
+      rows: TaggedValue[][];
+      fields: Array<{ name: string; dataTypeId: number }>;
+      rowCount: number;
+      commandTag?: string;
+    }
   | { ok: false; error: RpcFault };
-export type PgQuery = Envelope & { op: "QUERY"; sequence: number; sql: string; params: TaggedValue[] };
-export type PgExecuteMany = Envelope & { op: "EXECUTE_MANY"; sequence: number; sql: string; paramSets: TaggedValue[][] };
+export type PgQuery = Envelope & {
+  op: "QUERY";
+  sequence: number;
+  sql: string;
+  params: TaggedValue[];
+};
+export type PgExecuteMany = Envelope & {
+  op: "EXECUTE_MANY";
+  sequence: number;
+  sql: string;
+  paramSets: TaggedValue[][];
+};
 export type PgRequest = PgQuery | PgExecuteMany;
 export type WorkerBoot = Envelope & {
   type: "BOOT";
@@ -73,15 +96,31 @@ export type TableSnapshot = {
   name: string;
   columns: ColumnSnapshot[];
   primaryKey: { name: string | null; columns: string[] };
-  foreignKeys: Array<{ name: string | null; columns: string[]; referredTable: string; referredColumns: string[]; options: Record<string, unknown> }>;
+  foreignKeys: Array<{
+    name: string | null;
+    columns: string[];
+    referredTable: string;
+    referredColumns: string[];
+    options: Record<string, unknown>;
+  }>;
   uniqueConstraints: Array<{ name: string | null; columns: string[] }>;
   checkConstraints: Array<{ name: string | null; sqlText: string }>;
   indexes: Array<{ name: string; columns: string[]; unique: boolean }>;
 };
-export type SchemaSnapshot = { dialect: DatabaseMode; tables: TableSnapshot[]; alembicVersion: string[] };
+export type SchemaSnapshot = {
+  dialect: DatabaseMode;
+  tables: TableSnapshot[];
+  alembicVersion: string[];
+};
 export type WorkspaceState = { files: string[]; revisions: RevisionNode[]; schema: SchemaSnapshot };
-export type TableData = { table: string; columns: string[]; rows: TaggedValue[][]; truncated: boolean };
-export type SchemaObjectKind = "table" | "column" | "primaryKey" | "foreignKey" | "uniqueConstraint" | "checkConstraint" | "index";
+export type TableData = {
+  table: string;
+  columns: string[];
+  rows: TaggedValue[][];
+  truncated: boolean;
+};
+export type SchemaObjectKind =
+  "table" | "column" | "primaryKey" | "foreignKey" | "uniqueConstraint" | "checkConstraint" | "index";
 export type SchemaChange = {
   kind: SchemaObjectKind;
   table: string;
@@ -90,7 +129,10 @@ export type SchemaChange = {
   before?: unknown;
   after?: unknown;
 };
-export type SchemaDiff = { changes: SchemaChange[]; alembicVersion: { before: string[]; after: string[] } };
+export type SchemaDiff = {
+  changes: SchemaChange[];
+  alembicVersion: { before: string[]; after: string[] };
+};
 export type WorkspaceSeedFile = { path: string; content: string };
 export type PythonWorkspaceSeed = { files: WorkspaceSeedFile[]; sqliteDatabase?: string };
 export type RuntimeCloneSeed = PythonWorkspaceSeed & {
@@ -112,35 +154,34 @@ export type CommandResult = {
   before: WorkspaceState;
   after: WorkspaceState;
 };
-export type SqliteRuntimeRequest = Envelope & (
-  | { type: "RUN_COMMAND"; command: string }
-  | { type: "READ_TABLE"; table: string }
-  | { type: "CREATE_WORKSPACE"; seed?: PythonWorkspaceSeed }
-  | { type: "EXPORT_CLONE" }
-  | { type: "RUN_ALEMBIC"; argv: string[] }
-  | { type: "READ_FILE"; path: string }
-  | { type: "WRITE_FILE"; path: string; content: string }
-  | { type: "DELETE_REVISION"; path: string }
-  | { type: "INSPECT" }
-);
-export type SqliteRuntimeReply = Envelope & (
-  | { type: "PROGRESS"; message: string }
-  | { type: "TABLE_DATA"; data: TableData }
-  | { type: "READY" }
-  | { type: "WORKSPACE_CREATED"; state: WorkspaceState }
-  | { type: "CLONE_EXPORTED"; seed: PythonWorkspaceSeed }
-  | { type: "COMMAND_RESULT"; result: CommandResult }
-  | { type: "FILE_CONTENT"; path: string; content: string }
-  | { type: "FILE_WRITTEN"; state: WorkspaceState; fileChanges: FileChange[] }
-  | { type: "REVISION_DELETED"; state: WorkspaceState; fileChanges: FileChange[] }
-  | { type: "STATE_SNAPSHOT"; state: WorkspaceState }
-  | { type: "ERROR"; error: RpcFault }
-);
-export type PythonReply = Envelope & (
-  | { type: "READY" }
-  | { type: "RESULT"; value: string }
-  | { type: "ERROR"; error: RpcFault }
-);
+export type SqliteRuntimeRequest = Envelope &
+  (
+    | { type: "RUN_COMMAND"; command: string }
+    | { type: "READ_TABLE"; table: string }
+    | { type: "CREATE_WORKSPACE"; seed?: PythonWorkspaceSeed }
+    | { type: "EXPORT_CLONE" }
+    | { type: "RUN_ALEMBIC"; argv: string[] }
+    | { type: "READ_FILE"; path: string }
+    | { type: "WRITE_FILE"; path: string; content: string }
+    | { type: "DELETE_REVISION"; path: string }
+    | { type: "INSPECT" }
+  );
+export type SqliteRuntimeReply = Envelope &
+  (
+    | { type: "PROGRESS"; message: string }
+    | { type: "TABLE_DATA"; data: TableData }
+    | { type: "READY" }
+    | { type: "WORKSPACE_CREATED"; state: WorkspaceState }
+    | { type: "CLONE_EXPORTED"; seed: PythonWorkspaceSeed }
+    | { type: "COMMAND_RESULT"; result: CommandResult }
+    | { type: "FILE_CONTENT"; path: string; content: string }
+    | { type: "FILE_WRITTEN"; state: WorkspaceState; fileChanges: FileChange[] }
+    | { type: "REVISION_DELETED"; state: WorkspaceState; fileChanges: FileChange[] }
+    | { type: "STATE_SNAPSHOT"; state: WorkspaceState }
+    | { type: "ERROR"; error: RpcFault }
+  );
+export type PythonReply = Envelope &
+  ({ type: "READY" } | { type: "RESULT"; value: string } | { type: "ERROR"; error: RpcFault });
 
 // SQLite's original names remain available to existing T3 consumers.
 export type AlembicRuntimeRequest = SqliteRuntimeRequest;
@@ -151,9 +192,14 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function isEnvelope(value: unknown): value is Envelope & Record<string, unknown> {
-  return isRecord(value) && value.protocolVersion === PROTOCOL_VERSION &&
-    typeof value.requestId === "string" && value.requestId.length > 0 &&
-    typeof value.workspaceId === "string" && /^[a-zA-Z0-9_-]{1,80}$/.test(value.workspaceId);
+  return (
+    isRecord(value) &&
+    value.protocolVersion === PROTOCOL_VERSION &&
+    typeof value.requestId === "string" &&
+    value.requestId.length > 0 &&
+    typeof value.workspaceId === "string" &&
+    /^[a-zA-Z0-9_-]{1,80}$/.test(value.workspaceId)
+  );
 }
 
 export function isPythonRun(value: unknown): value is PythonRun {
@@ -164,38 +210,67 @@ export function isTaggedValue(value: unknown): value is TaggedValue {
   if (!isRecord(value) || typeof value.tag !== "string") return false;
   if (value.tag === "null") return true;
   if (value.tag === "boolean") return typeof value.value === "boolean";
-  if (value.tag === "string" || value.tag === "bigint" || value.tag === "decimal" || value.tag === "bytea") return typeof value.value === "string";
-  if (value.tag === "number") return typeof value.value === "number" && Number.isFinite(value.value) && (!Number.isInteger(value.value) || Number.isSafeInteger(value.value));
-  if (value.tag === "special-number") return value.value === "NaN" || value.value === "Infinity" || value.value === "-Infinity";
-  if (value.tag === "date" || value.tag === "time" || value.tag === "timestamp") return typeof value.value === "string" && Number.isInteger(value.dataTypeId);
+  if (value.tag === "string" || value.tag === "bigint" || value.tag === "decimal" || value.tag === "bytea")
+    return typeof value.value === "string";
+  if (value.tag === "number")
+    return (
+      typeof value.value === "number" &&
+      Number.isFinite(value.value) &&
+      (!Number.isInteger(value.value) || Number.isSafeInteger(value.value))
+    );
+  if (value.tag === "special-number")
+    return value.value === "NaN" || value.value === "Infinity" || value.value === "-Infinity";
+  if (value.tag === "date" || value.tag === "time" || value.tag === "timestamp")
+    return typeof value.value === "string" && Number.isInteger(value.dataTypeId);
   if (value.tag === "array") return Array.isArray(value.value) && value.value.every(isTaggedValue);
   return false;
 }
 
 export function isPgQuery(value: unknown): value is PgQuery {
-  return isEnvelope(value) && isRecord(value) && value.op === "QUERY" &&
-    Number.isInteger(value.sequence) && Number(value.sequence) > 0 && typeof value.sql === "string" &&
-    Array.isArray(value.params) && value.params.every(isTaggedValue);
+  return (
+    isEnvelope(value) &&
+    isRecord(value) &&
+    value.op === "QUERY" &&
+    Number.isInteger(value.sequence) &&
+    Number(value.sequence) > 0 &&
+    typeof value.sql === "string" &&
+    Array.isArray(value.params) &&
+    value.params.every(isTaggedValue)
+  );
 }
 
 export function isPgRequest(value: unknown): value is PgRequest {
   if (isPgQuery(value)) return true;
-  return isEnvelope(value) && isRecord(value) && value.op === "EXECUTE_MANY" &&
-    Number.isInteger(value.sequence) && Number(value.sequence) > 0 && typeof value.sql === "string" &&
-    Array.isArray(value.paramSets) && value.paramSets.every((params) =>
-      Array.isArray(params) && params.every(isTaggedValue));
+  return (
+    isEnvelope(value) &&
+    isRecord(value) &&
+    value.op === "EXECUTE_MANY" &&
+    Number.isInteger(value.sequence) &&
+    Number(value.sequence) > 0 &&
+    typeof value.sql === "string" &&
+    Array.isArray(value.paramSets) &&
+    value.paramSets.every((params) => Array.isArray(params) && params.every(isTaggedValue))
+  );
 }
 
 export function isWorkerBoot(value: unknown): value is WorkerBoot {
   if (!isEnvelope(value) || !isRecord(value) || value.type !== "BOOT") return false;
   if (value.runtime !== undefined && value.runtime !== "alembic") return false;
   try {
-    return value.port instanceof MessagePort && value.control instanceof SharedArrayBuffer && value.control.byteLength === CONTROL_BYTES &&
-      value.response instanceof SharedArrayBuffer && value.response.byteLength === RESPONSE_BYTES &&
-      typeof value.assetBase === "string" && new URL(value.assetBase).origin === location.origin &&
-      typeof value.databaseId === "string" && /^[a-zA-Z0-9_-]{1,128}$/.test(value.databaseId) &&
-      (value.previousDatabaseId === undefined || (typeof value.previousDatabaseId === "string" && /^[a-zA-Z0-9_-]{1,128}$/.test(value.previousDatabaseId))) &&
-      (value.databaseDump === undefined || value.databaseDump instanceof Blob);
+    return (
+      value.port instanceof MessagePort &&
+      value.control instanceof SharedArrayBuffer &&
+      value.control.byteLength === CONTROL_BYTES &&
+      value.response instanceof SharedArrayBuffer &&
+      value.response.byteLength === RESPONSE_BYTES &&
+      typeof value.assetBase === "string" &&
+      new URL(value.assetBase).origin === location.origin &&
+      typeof value.databaseId === "string" &&
+      /^[a-zA-Z0-9_-]{1,128}$/.test(value.databaseId) &&
+      (value.previousDatabaseId === undefined ||
+        (typeof value.previousDatabaseId === "string" && /^[a-zA-Z0-9_-]{1,128}$/.test(value.previousDatabaseId))) &&
+      (value.databaseDump === undefined || value.databaseDump instanceof Blob)
+    );
   } catch {
     return false;
   }
@@ -204,9 +279,15 @@ export function isWorkerBoot(value: unknown): value is WorkerBoot {
 export function isPGliteReconnect(value: unknown): value is PGliteReconnect {
   if (!isEnvelope(value) || !isRecord(value) || value.type !== "RECONNECT_PGLITE") return false;
   try {
-    return value.port instanceof MessagePort && value.control instanceof SharedArrayBuffer && value.control.byteLength === CONTROL_BYTES &&
-      value.response instanceof SharedArrayBuffer && value.response.byteLength === RESPONSE_BYTES &&
-      typeof value.assetBase === "string" && new URL(value.assetBase).origin === location.origin;
+    return (
+      value.port instanceof MessagePort &&
+      value.control instanceof SharedArrayBuffer &&
+      value.control.byteLength === CONTROL_BYTES &&
+      value.response instanceof SharedArrayBuffer &&
+      value.response.byteLength === RESPONSE_BYTES &&
+      typeof value.assetBase === "string" &&
+      new URL(value.assetBase).origin === location.origin
+    );
   } catch {
     return false;
   }
@@ -231,28 +312,58 @@ export function isSqliteWorkerBoot(value: unknown): value is SqliteWorkerBoot {
 
 export function isSqliteRuntimeRequest(value: unknown): value is SqliteRuntimeRequest {
   if (!isEnvelope(value) || !isRecord(value)) return false;
-  if (value.type === "RUN_COMMAND") return typeof value.command === "string" && value.command.trim().length > 0 && value.command.length <= 8192;
-  if (value.type === "READ_TABLE") return typeof value.table === "string" && value.table.length > 0 && value.table.length <= 512;
-  const validPath = (path: unknown) => typeof path === "string" && path.length > 0 && path.length <= 512 &&
-    !path.startsWith("/") && !path.split("/").some((part) => part === "" || part === "." || part === "..");
+  if (value.type === "RUN_COMMAND")
+    return typeof value.command === "string" && value.command.trim().length > 0 && value.command.length <= 8192;
+  if (value.type === "READ_TABLE")
+    return typeof value.table === "string" && value.table.length > 0 && value.table.length <= 512;
+  const validPath = (path: unknown) =>
+    typeof path === "string" &&
+    path.length > 0 &&
+    path.length <= 512 &&
+    !path.startsWith("/") &&
+    !path.split("/").some((part) => part === "" || part === "." || part === "..");
   if (value.type === "CREATE_WORKSPACE") return value.seed === undefined || isPythonWorkspaceSeed(value.seed);
   if (value.type === "EXPORT_CLONE" || value.type === "INSPECT") return true;
   if (value.type === "RUN_ALEMBIC") {
-    return Array.isArray(value.argv) && value.argv.length > 0 && value.argv.length <= 64 &&
-      value.argv.every((item) => typeof item === "string" && item.length > 0 && item.length <= 4096);
+    return (
+      Array.isArray(value.argv) &&
+      value.argv.length > 0 &&
+      value.argv.length <= 64 &&
+      value.argv.every((item) => typeof item === "string" && item.length > 0 && item.length <= 4096)
+    );
   }
   if (value.type === "READ_FILE" || value.type === "DELETE_REVISION") return validPath(value.path);
-  return value.type === "WRITE_FILE" && validPath(value.path) &&
-    typeof value.content === "string" && new TextEncoder().encode(value.content).length <= 1024 * 1024;
+  return (
+    value.type === "WRITE_FILE" &&
+    validPath(value.path) &&
+    typeof value.content === "string" &&
+    new TextEncoder().encode(value.content).length <= 1024 * 1024
+  );
 }
 
 function isPythonWorkspaceSeed(value: unknown): value is PythonWorkspaceSeed {
   if (!isRecord(value) || !Array.isArray(value.files) || value.files.length > 200) return false;
   const encoder = new TextEncoder();
-  const validPath = (path: unknown) => typeof path === "string" && path.length > 0 && path.length <= 512 &&
-    !path.startsWith("/") && !path.split("/").some((part) => part === "" || part === "." || part === "..");
-  if (!value.files.every((file) => isRecord(file) && validPath(file.path) && typeof file.content === "string" && encoder.encode(file.content).length <= 1024 * 1024)) return false;
-  return value.sqliteDatabase === undefined || (typeof value.sqliteDatabase === "string" && value.sqliteDatabase.length <= 48 * 1024 * 1024);
+  const validPath = (path: unknown) =>
+    typeof path === "string" &&
+    path.length > 0 &&
+    path.length <= 512 &&
+    !path.startsWith("/") &&
+    !path.split("/").some((part) => part === "" || part === "." || part === "..");
+  if (
+    !value.files.every(
+      (file) =>
+        isRecord(file) &&
+        validPath(file.path) &&
+        typeof file.content === "string" &&
+        encoder.encode(file.content).length <= 1024 * 1024,
+    )
+  )
+    return false;
+  return (
+    value.sqliteDatabase === undefined ||
+    (typeof value.sqliteDatabase === "string" && value.sqliteDatabase.length <= 48 * 1024 * 1024)
+  );
 }
 
 function isStringArray(value: unknown): value is string[] {
@@ -260,59 +371,140 @@ function isStringArray(value: unknown): value is string[] {
 }
 
 function isFileChanges(value: unknown): value is FileChange[] {
-  return Array.isArray(value) && value.every((item) => isRecord(item) && typeof item.path === "string" &&
-    (item.change === "added" || item.change === "modified" || item.change === "deleted"));
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (item) =>
+        isRecord(item) &&
+        typeof item.path === "string" &&
+        (item.change === "added" || item.change === "modified" || item.change === "deleted"),
+    )
+  );
 }
 
 function isRevisionNode(value: unknown): value is RevisionNode {
-  return isRecord(value) && typeof value.revision === "string" && isStringArray(value.downRevisions) &&
+  return (
+    isRecord(value) &&
+    typeof value.revision === "string" &&
+    isStringArray(value.downRevisions) &&
     (value.path === undefined || typeof value.path === "string") &&
-    isStringArray(value.branchLabels) && isStringArray(value.dependsOn) && typeof value.isHead === "boolean" &&
-    typeof value.isBranchPoint === "boolean" && typeof value.isMergePoint === "boolean" && typeof value.isCurrent === "boolean";
+    isStringArray(value.branchLabels) &&
+    isStringArray(value.dependsOn) &&
+    typeof value.isHead === "boolean" &&
+    typeof value.isBranchPoint === "boolean" &&
+    typeof value.isMergePoint === "boolean" &&
+    typeof value.isCurrent === "boolean"
+  );
 }
 
 function isTableSnapshot(value: unknown): value is TableSnapshot {
-  if (!isRecord(value) || typeof value.name !== "string" || !Array.isArray(value.columns) ||
-    !value.columns.every((column) => isRecord(column) && typeof column.name === "string" && typeof column.type === "string" &&
-      typeof column.nullable === "boolean" && (column.default === null || typeof column.default === "string") &&
-      Number.isInteger(column.primaryKeyPosition)) || !isRecord(value.primaryKey) ||
-    !(value.primaryKey.name === null || typeof value.primaryKey.name === "string") || !isStringArray(value.primaryKey.columns)) return false;
-  return Array.isArray(value.foreignKeys) && Array.isArray(value.uniqueConstraints) &&
-    Array.isArray(value.checkConstraints) && Array.isArray(value.indexes);
+  if (
+    !isRecord(value) ||
+    typeof value.name !== "string" ||
+    !Array.isArray(value.columns) ||
+    !value.columns.every(
+      (column) =>
+        isRecord(column) &&
+        typeof column.name === "string" &&
+        typeof column.type === "string" &&
+        typeof column.nullable === "boolean" &&
+        (column.default === null || typeof column.default === "string") &&
+        Number.isInteger(column.primaryKeyPosition),
+    ) ||
+    !isRecord(value.primaryKey) ||
+    !(value.primaryKey.name === null || typeof value.primaryKey.name === "string") ||
+    !isStringArray(value.primaryKey.columns)
+  )
+    return false;
+  return (
+    Array.isArray(value.foreignKeys) &&
+    Array.isArray(value.uniqueConstraints) &&
+    Array.isArray(value.checkConstraints) &&
+    Array.isArray(value.indexes)
+  );
 }
 
 function isWorkspaceState(value: unknown): value is WorkspaceState {
-  return isRecord(value) && isStringArray(value.files) && Array.isArray(value.revisions) && value.revisions.every(isRevisionNode) &&
-    isRecord(value.schema) && (value.schema.dialect === "sqlite" || value.schema.dialect === "postgresql") && Array.isArray(value.schema.tables) &&
-    value.schema.tables.every(isTableSnapshot) && isStringArray(value.schema.alembicVersion);
+  return (
+    isRecord(value) &&
+    isStringArray(value.files) &&
+    Array.isArray(value.revisions) &&
+    value.revisions.every(isRevisionNode) &&
+    isRecord(value.schema) &&
+    (value.schema.dialect === "sqlite" || value.schema.dialect === "postgresql") &&
+    Array.isArray(value.schema.tables) &&
+    value.schema.tables.every(isTableSnapshot) &&
+    isStringArray(value.schema.alembicVersion)
+  );
 }
 
 function isSchemaDiff(value: unknown): value is SchemaDiff {
-  const kinds = new Set<SchemaObjectKind>(["table", "column", "primaryKey", "foreignKey", "uniqueConstraint", "checkConstraint", "index"]);
-  return isRecord(value) && Array.isArray(value.changes) && value.changes.every((item) =>
-    isRecord(item) && typeof item.kind === "string" && kinds.has(item.kind as SchemaObjectKind) &&
-    typeof item.table === "string" && typeof item.name === "string" &&
-    (item.change === "added" || item.change === "modified" || item.change === "deleted")) &&
-    isRecord(value.alembicVersion) && isStringArray(value.alembicVersion.before) && isStringArray(value.alembicVersion.after);
+  const kinds = new Set<SchemaObjectKind>([
+    "table",
+    "column",
+    "primaryKey",
+    "foreignKey",
+    "uniqueConstraint",
+    "checkConstraint",
+    "index",
+  ]);
+  return (
+    isRecord(value) &&
+    Array.isArray(value.changes) &&
+    value.changes.every(
+      (item) =>
+        isRecord(item) &&
+        typeof item.kind === "string" &&
+        kinds.has(item.kind as SchemaObjectKind) &&
+        typeof item.table === "string" &&
+        typeof item.name === "string" &&
+        (item.change === "added" || item.change === "modified" || item.change === "deleted"),
+    ) &&
+    isRecord(value.alembicVersion) &&
+    isStringArray(value.alembicVersion.before) &&
+    isStringArray(value.alembicVersion.after)
+  );
 }
 
 export function isSqliteRuntimeReply(value: unknown): value is SqliteRuntimeReply {
   if (!isEnvelope(value) || !isRecord(value)) return false;
   if (value.type === "PROGRESS") return typeof value.message === "string";
-  if (value.type === "TABLE_DATA") return isRecord(value.data) && typeof value.data.table === "string" &&
-    isStringArray(value.data.columns) && typeof value.data.truncated === "boolean" && Array.isArray(value.data.rows) &&
-    value.data.rows.every((row) => Array.isArray(row) && row.length === (value.data as TableData).columns.length && row.every(isTaggedValue));
+  if (value.type === "TABLE_DATA")
+    return (
+      isRecord(value.data) &&
+      typeof value.data.table === "string" &&
+      isStringArray(value.data.columns) &&
+      typeof value.data.truncated === "boolean" &&
+      Array.isArray(value.data.rows) &&
+      value.data.rows.every(
+        (row) =>
+          Array.isArray(row) && row.length === (value.data as TableData).columns.length && row.every(isTaggedValue),
+      )
+    );
   if (value.type === "READY") return true;
-  if (value.type === "ERROR") return isRecord(value.error) && typeof value.error.code === "string" && typeof value.error.message === "string";
+  if (value.type === "ERROR")
+    return isRecord(value.error) && typeof value.error.code === "string" && typeof value.error.message === "string";
   if (value.type === "WORKSPACE_CREATED" || value.type === "STATE_SNAPSHOT") return isWorkspaceState(value.state);
   if (value.type === "CLONE_EXPORTED") return isPythonWorkspaceSeed(value.seed);
   if (value.type === "FILE_CONTENT") return typeof value.path === "string" && typeof value.content === "string";
-  if (value.type === "FILE_WRITTEN" || value.type === "REVISION_DELETED") return isWorkspaceState(value.state) && isFileChanges(value.fileChanges);
-  return value.type === "COMMAND_RESULT" && isRecord(value.result) && typeof value.result.success === "boolean" &&
-    Array.isArray(value.result.argv) && typeof value.result.stdout === "string" && typeof value.result.stderr === "string" &&
-    isFileChanges(value.result.fileChanges) && isSchemaDiff(value.result.schemaDiff) &&
-    isWorkspaceState(value.result.before) && isWorkspaceState(value.result.after) &&
-    (value.result.error === undefined || (isRecord(value.result.error) && typeof value.result.error.code === "string" && typeof value.result.error.message === "string"));
+  if (value.type === "FILE_WRITTEN" || value.type === "REVISION_DELETED")
+    return isWorkspaceState(value.state) && isFileChanges(value.fileChanges);
+  return (
+    value.type === "COMMAND_RESULT" &&
+    isRecord(value.result) &&
+    typeof value.result.success === "boolean" &&
+    Array.isArray(value.result.argv) &&
+    typeof value.result.stdout === "string" &&
+    typeof value.result.stderr === "string" &&
+    isFileChanges(value.result.fileChanges) &&
+    isSchemaDiff(value.result.schemaDiff) &&
+    isWorkspaceState(value.result.before) &&
+    isWorkspaceState(value.result.after) &&
+    (value.result.error === undefined ||
+      (isRecord(value.result.error) &&
+        typeof value.result.error.code === "string" &&
+        typeof value.result.error.message === "string"))
+  );
 }
 
 export function rpcError(code: string, message = code): PgResult {
@@ -324,8 +516,16 @@ export const isAlembicRuntimeReply = isSqliteRuntimeReply;
 
 export function isPgResult(value: unknown): value is PgResult {
   if (!isRecord(value)) return false;
-  if (value.ok === false) return isRecord(value.error) && typeof value.error.code === "string" && typeof value.error.message === "string";
-  return value.ok === true && Array.isArray(value.rows) && value.rows.every((row) => Array.isArray(row) && row.every(isTaggedValue)) &&
-    Array.isArray(value.fields) && value.fields.every((field) => isRecord(field) && typeof field.name === "string" && Number.isInteger(field.dataTypeId)) &&
-    Number.isInteger(value.rowCount);
+  if (value.ok === false)
+    return isRecord(value.error) && typeof value.error.code === "string" && typeof value.error.message === "string";
+  return (
+    value.ok === true &&
+    Array.isArray(value.rows) &&
+    value.rows.every((row) => Array.isArray(row) && row.every(isTaggedValue)) &&
+    Array.isArray(value.fields) &&
+    value.fields.every(
+      (field) => isRecord(field) && typeof field.name === "string" && Number.isInteger(field.dataTypeId),
+    ) &&
+    Number.isInteger(value.rowCount)
+  );
 }

@@ -23,8 +23,12 @@ const readyCapabilities: capabilityModule.RuntimeCapabilities = {
 describe("App", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    HTMLDialogElement.prototype.showModal = function showModal() { this.open = true; };
-    HTMLDialogElement.prototype.close = function close() { this.open = false; };
+    HTMLDialogElement.prototype.showModal = function showModal() {
+      this.open = true;
+    };
+    HTMLDialogElement.prototype.close = function close() {
+      this.open = false;
+    };
   });
 
   it("creates an available PostgreSQL workspace directly", async () => {
@@ -49,13 +53,11 @@ describe("App", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    expect(screen.getAllByRole("button", { name: "PostgreSQL workspace 만들기" })).toEqual(expect.arrayContaining([
-      expect.objectContaining({ disabled: true }),
-    ]));
-    await user.click(screen.getByRole("button", { name: "Workspace 관리" }));
-    expect(screen.getAllByText(/필요한 기능:/)[0]).toHaveTextContent(
-      "Cross-origin isolation, SharedArrayBuffer",
+    expect(screen.getAllByRole("button", { name: "PostgreSQL workspace 만들기" })).toEqual(
+      expect.arrayContaining([expect.objectContaining({ disabled: true })]),
     );
+    await user.click(screen.getByRole("button", { name: "Workspace 관리" }));
+    expect(screen.getAllByText(/필요한 기능:/)[0]).toHaveTextContent("Cross-origin isolation, SharedArrayBuffer");
   });
 
   it("shows a practical SQLAlchemy 2.x User model in the autogenerate guide", async () => {
@@ -109,10 +111,35 @@ describe("App", () => {
     vi.spyOn(capabilityModule, "detectRuntimeCapabilities").mockReturnValue(readyCapabilities);
     const user = userEvent.setup();
     const lab = createLab();
-    lab.store.setState({ activeId: "second", guideEnabled: true, activeLesson: "collaboration", workspaces: [
-      { id: "first", name: "SQLite 1", mode: "sqlite", drafts: {}, entries: [], changes: [], broken: false, stale: false, evidence: emptyLessonEvidence() },
-      { id: "second", name: "PostgreSQL 2", mode: "postgresql", drafts: {}, entries: [], changes: [], broken: false, stale: false, evidence: emptyLessonEvidence() },
-    ] });
+    lab.store.setState({
+      activeId: "second",
+      guideEnabled: true,
+      activeLesson: "collaboration",
+      workspaces: [
+        {
+          id: "first",
+          name: "SQLite 1",
+          mode: "sqlite",
+          drafts: {},
+          entries: [],
+          changes: [],
+          broken: false,
+          stale: false,
+          evidence: emptyLessonEvidence(),
+        },
+        {
+          id: "second",
+          name: "PostgreSQL 2",
+          mode: "postgresql",
+          drafts: {},
+          entries: [],
+          changes: [],
+          broken: false,
+          stale: false,
+          evidence: emptyLessonEvidence(),
+        },
+      ],
+    });
     const removeWorkspace = vi.spyOn(lab, "removeWorkspace").mockResolvedValue(undefined);
     render(<App controller={lab} />);
 
@@ -142,11 +169,27 @@ describe("App", () => {
   it("offers an explicit checkpoint retry when automatic recovery did not complete", () => {
     vi.spyOn(capabilityModule, "detectRuntimeCapabilities").mockReturnValue(readyCapabilities);
     const lab = createLab();
-    lab.store.setState({ activeId: "broken", workspaces: [{ id: "broken", name: "SQLite 1", mode: "sqlite",
-      drafts: {}, entries: [], changes: [], broken: true, stale: true,
-      evidence: emptyLessonEvidence(),
-      error: { code: "ALEMBIC_COMMAND_TIMEOUT", message: "RUN_COMMAND exceeded 30000 ms", traceback: "original trace" },
-    }] });
+    lab.store.setState({
+      activeId: "broken",
+      workspaces: [
+        {
+          id: "broken",
+          name: "SQLite 1",
+          mode: "sqlite",
+          drafts: {},
+          entries: [],
+          changes: [],
+          broken: true,
+          stale: true,
+          evidence: emptyLessonEvidence(),
+          error: {
+            code: "ALEMBIC_COMMAND_TIMEOUT",
+            message: "RUN_COMMAND exceeded 30000 ms",
+            traceback: "original trace",
+          },
+        },
+      ],
+    });
     render(<App controller={lab} />);
     expect(screen.getByRole("alert")).toHaveTextContent("자동 복원이 완료되지 않았습니다");
     expect(screen.getByRole("button", { name: "명령 실행" })).toBeDisabled();

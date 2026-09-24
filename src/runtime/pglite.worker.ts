@@ -1,8 +1,19 @@
 /// <reference lib="webworker" />
 import { PGlite } from "@electric-sql/pglite";
 import {
-  CONTROL, STATE, isPGliteDelete, isPGliteExport, isPGliteReconnect, isPgRequest, isWorkerBoot, rpcError,
-  type PGliteReconnect, type PgResult, type RpcFault, type TaggedValue, type WorkerBoot,
+  CONTROL,
+  STATE,
+  isPGliteDelete,
+  isPGliteExport,
+  isPGliteReconnect,
+  isPgRequest,
+  isWorkerBoot,
+  rpcError,
+  type PGliteReconnect,
+  type PgResult,
+  type RpcFault,
+  type TaggedValue,
+  type WorkerBoot,
 } from "./protocol";
 import { publishResponse } from "./sync-rpc";
 import { decodeValue, encodeValue } from "./value-codec";
@@ -55,7 +66,9 @@ async function executeMany(sql: string, paramSets: TaggedValue[][]) {
     return { rows: [], fields: [], rowCount: 0, affectedRows: 0, command: "" };
   }
   let rowCount = 0;
-  let last = await database!.query<unknown[]>(sql, paramSets[0]!.map(decodeValue), { rowMode: "array" });
+  let last = await database!.query<unknown[]>(sql, paramSets[0]!.map(decodeValue), {
+    rowMode: "array",
+  });
   rowCount += last.rowCount ?? last.affectedRows ?? last.rows.length;
   for (const params of paramSets.slice(1)) {
     last = await database!.query<unknown[]>(sql, params.map(decodeValue), { rowMode: "array" });
@@ -73,7 +86,12 @@ function attachConnection(connection: PGliteConnection): void {
   activePort.onmessage = async (requestEvent: MessageEvent<unknown>) => {
     const request = requestEvent.data;
     if (!isPgRequest(request)) {
-      publishResponse(control, response, Atomics.load(control, CONTROL.REQUEST_SEQUENCE), rpcError("RPC_INVALID_REQUEST"));
+      publishResponse(
+        control,
+        response,
+        Atomics.load(control, CONTROL.REQUEST_SEQUENCE),
+        rpcError("RPC_INVALID_REQUEST"),
+      );
       return;
     }
     if (request.workspaceId !== connection.workspaceId || request.protocolVersion !== connection.protocolVersion) {
@@ -87,10 +105,16 @@ function attachConnection(connection: PGliteConnection): void {
 
     let result: PgResult;
     try {
-      const queryResult = request.op === "QUERY"
-        ? await database!.query<unknown[]>(request.sql, request.params.map(decodeValue), { rowMode: "array" })
-        : await executeMany(request.sql, request.paramSets);
-      const fields = queryResult.fields.map((field) => ({ name: field.name, dataTypeId: field.dataTypeID }));
+      const queryResult =
+        request.op === "QUERY"
+          ? await database!.query<unknown[]>(request.sql, request.params.map(decodeValue), {
+              rowMode: "array",
+            })
+          : await executeMany(request.sql, request.paramSets);
+      const fields = queryResult.fields.map((field) => ({
+        name: field.name,
+        dataTypeId: field.dataTypeID,
+      }));
       result = {
         ok: true,
         rows: queryResult.rows.map((row) => row.map((value, index) => encodeValue(value, fields[index]?.dataTypeId))),
@@ -99,9 +123,10 @@ function attachConnection(connection: PGliteConnection): void {
         commandTag: queryResult.command,
       };
     } catch (error) {
-      const fault = error instanceof Error && error.message === "UNSUPPORTED_VALUE_TYPE"
-        ? { code: "UNSUPPORTED_VALUE_TYPE", message: error.message }
-        : databaseFault(error);
+      const fault =
+        error instanceof Error && error.message === "UNSUPPORTED_VALUE_TYPE"
+          ? { code: "UNSUPPORTED_VALUE_TYPE", message: error.message }
+          : databaseFault(error);
       result = { ok: false, error: fault };
     }
     publishResponse(control, response, request.sequence, result);
@@ -122,7 +147,11 @@ self.onmessage = async (event: MessageEvent<unknown>) => {
   if (isPGliteDelete(event.data)) {
     const request = event.data;
     if (workspaceId !== request.workspaceId) {
-      self.postMessage({ ...request, type: "ERROR", error: { code: "PGLITE_DELETE_FAILED", message: "PGlite Worker has no matching database" } });
+      self.postMessage({
+        ...request,
+        type: "ERROR",
+        error: { code: "PGLITE_DELETE_FAILED", message: "PGlite Worker has no matching database" },
+      });
       return;
     }
     try {
@@ -135,7 +164,14 @@ self.onmessage = async (event: MessageEvent<unknown>) => {
       databaseId = undefined;
       self.postMessage({ ...request, type: "PGLITE_DELETED" });
     } catch (error) {
-      self.postMessage({ ...request, type: "ERROR", error: { code: "PGLITE_DELETE_FAILED", message: error instanceof Error ? error.message : String(error) } });
+      self.postMessage({
+        ...request,
+        type: "ERROR",
+        error: {
+          code: "PGLITE_DELETE_FAILED",
+          message: error instanceof Error ? error.message : String(error),
+        },
+      });
     }
     return;
   }
@@ -143,14 +179,25 @@ self.onmessage = async (event: MessageEvent<unknown>) => {
   if (isPGliteExport(event.data)) {
     const request = event.data;
     if (!database || workspaceId !== request.workspaceId) {
-      self.postMessage({ ...request, type: "ERROR", error: { code: "PGLITE_EXPORT_FAILED", message: "PGlite Worker has no matching database" } });
+      self.postMessage({
+        ...request,
+        type: "ERROR",
+        error: { code: "PGLITE_EXPORT_FAILED", message: "PGlite Worker has no matching database" },
+      });
       return;
     }
     try {
       const dump = await database.dumpDataDir("gzip");
       self.postMessage({ ...request, type: "PGLITE_EXPORTED", dump });
     } catch (error) {
-      self.postMessage({ ...request, type: "ERROR", error: { code: "PGLITE_EXPORT_FAILED", message: error instanceof Error ? error.message : String(error) } });
+      self.postMessage({
+        ...request,
+        type: "ERROR",
+        error: {
+          code: "PGLITE_EXPORT_FAILED",
+          message: error instanceof Error ? error.message : String(error),
+        },
+      });
     }
     return;
   }
@@ -163,7 +210,10 @@ self.onmessage = async (event: MessageEvent<unknown>) => {
         requestId: connection.requestId,
         workspaceId: connection.workspaceId,
         type: "ERROR",
-        error: { code: "PGLITE_RECONNECT_FAILED", message: "PGlite Worker has no matching database" },
+        error: {
+          code: "PGLITE_RECONNECT_FAILED",
+          message: "PGlite Worker has no matching database",
+        },
       });
       return;
     }
@@ -173,7 +223,10 @@ self.onmessage = async (event: MessageEvent<unknown>) => {
   }
 
   if (!isWorkerBoot(event.data)) {
-    self.postMessage({ type: "ERROR", error: { code: "RPC_INVALID_BOOT", message: "Invalid PGlite Worker boot message" } });
+    self.postMessage({
+      type: "ERROR",
+      error: { code: "RPC_INVALID_BOOT", message: "Invalid PGlite Worker boot message" },
+    });
     return;
   }
 
@@ -192,7 +245,10 @@ self.onmessage = async (event: MessageEvent<unknown>) => {
     const dataDir = dataDirName(boot.databaseId);
     if (boot.databaseDump) await deleteDatabase(dataDir);
     database = new PGlite({
-      dataDir: `idb://${dataDir}`, pgliteWasmModule, initdbWasmModule, fsBundle,
+      dataDir: `idb://${dataDir}`,
+      pgliteWasmModule,
+      initdbWasmModule,
+      fsBundle,
       loadDataDir: boot.databaseDump,
       // Preserve JSON text across the tagged string transport. SQLAlchemy's
       // JSON result processor decodes it in Python, without JS number loss.
@@ -214,7 +270,10 @@ self.onmessage = async (event: MessageEvent<unknown>) => {
       requestId: boot.requestId,
       workspaceId: boot.workspaceId,
       type: "ERROR",
-      error: { code: "PGLITE_BOOT_FAILED", message: error instanceof Error ? error.message : String(error) },
+      error: {
+        code: "PGLITE_BOOT_FAILED",
+        message: error instanceof Error ? error.message : String(error),
+      },
     });
   }
 };

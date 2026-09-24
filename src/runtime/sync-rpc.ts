@@ -1,11 +1,18 @@
 import {
-  CONTROL, RESPONSE_BYTES, RPC_TIMEOUT_MS, STATE, isPgResult, rpcError,
-  type Envelope, type PgRequest, type PgResult, type TaggedValue,
+  CONTROL,
+  RESPONSE_BYTES,
+  RPC_TIMEOUT_MS,
+  STATE,
+  isPgResult,
+  rpcError,
+  type Envelope,
+  type PgRequest,
+  type PgResult,
+  type TaggedValue,
 } from "./protocol";
 
 type PgPayload =
-  | { op: "QUERY"; sql: string; params: TaggedValue[] }
-  | { op: "EXECUTE_MANY"; sql: string; paramSets: TaggedValue[][] };
+  { op: "QUERY"; sql: string; params: TaggedValue[] } | { op: "EXECUTE_MANY"; sql: string; paramSets: TaggedValue[][] };
 
 export function publishResponse(control: Int32Array, response: Uint8Array, sequence: number, value: PgResult): void {
   if (Atomics.load(control, CONTROL.STATE) !== STATE.WAITING) return;
@@ -73,15 +80,26 @@ export class SyncRpc {
     const length = Atomics.load(this.control, CONTROL.LENGTH);
     const responseSequence = Atomics.load(this.control, CONTROL.RESPONSE_SEQUENCE);
     if (state === STATE.BROKEN) return this.fail("RPC_WORKER_TERMINATED");
-    if ((state !== STATE.OK && state !== STATE.ERROR) || responseSequence !== sequence || length < 1 || length > this.response.length) {
-      return this.fail("RPC_PROTOCOL_ERROR", `Invalid header: state=${state}, request=${sequence}, response=${responseSequence}, length=${length}`);
+    if (
+      (state !== STATE.OK && state !== STATE.ERROR) ||
+      responseSequence !== sequence ||
+      length < 1 ||
+      length > this.response.length
+    ) {
+      return this.fail(
+        "RPC_PROTOCOL_ERROR",
+        `Invalid header: state=${state}, request=${sequence}, response=${responseSequence}, length=${length}`,
+      );
     }
 
     try {
       const bytes = Uint8Array.from(this.response.subarray(0, length));
       const decoded: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
       if (!isPgResult(decoded) || decoded.ok !== (state === STATE.OK)) {
-        return this.fail("RPC_PROTOCOL_ERROR", `Invalid response body for state ${state}: ${JSON.stringify(decoded).slice(0, 500)}`);
+        return this.fail(
+          "RPC_PROTOCOL_ERROR",
+          `Invalid response body for state ${state}: ${JSON.stringify(decoded).slice(0, 500)}`,
+        );
       }
       Atomics.store(this.control, CONTROL.STATE, STATE.IDLE);
       return decoded;

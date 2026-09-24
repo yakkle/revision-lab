@@ -20,6 +20,12 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:dev": "playwright test --config=playwright.dev.config.ts",
+    "format": "pnpm format:prettier && pnpm format:python",
+    "format:check": "pnpm format:prettier:check && pnpm format:python:check",
+    "format:prettier": "prettier --write .",
+    "format:prettier:check": "prettier --check .",
+    "format:python": "ruff format src/runtime/python",
+    "format:python:check": "ruff format --check src/runtime/python",
     "check:static-size": "node scripts/check-static-file-size.mjs"
   },
   "dependencies": {
@@ -53,6 +59,7 @@
     "eslint-plugin-react-refresh": "0.5.6",
     "globals": "17.12.0",
     "jsdom": "30.0.1",
+    "prettier": "3.9.9",
     "typescript": "6.0.3",
     "typescript-eslint": "8.69.0",
     "vite": "8.2.2",

@@ -26,7 +26,7 @@ TEXT_SUFFIXES = {".ini", ".mako", ".py", ".sql", ".txt"}
 MAX_FILE_BYTES = 1024 * 1024
 DATABASE_MODE = "sqlite"
 
-ENV_TEMPLATE = '''from logging.config import fileConfig
+ENV_TEMPLATE = """from logging.config import fileConfig
 from pathlib import Path
 import runpy
 import sys
@@ -73,9 +73,9 @@ if context.is_offline_mode():
     run_migrations_offline()
 else:
     run_migrations_online()
-'''
+"""
 
-MODELS_TEMPLATE = '''from sqlalchemy import MetaData, String
+MODELS_TEMPLATE = """from sqlalchemy import MetaData, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -102,7 +102,7 @@ class User(Base):
 
 # Revision Lab의 env.py가 읽는 target_metadata입니다.
 metadata = Base.metadata
-'''
+"""
 
 
 class RuntimeRequestError(Exception):
@@ -122,7 +122,10 @@ def _relative_path(root: Path, value: str, *, suffix_required: bool = True) -> P
     if relative.is_absolute() or not relative.parts or any(part in {"", ".", ".."} for part in relative.parts):
         raise RuntimeRequestError("INVALID_PATH", f"Path must stay inside the workspace: {value}")
     if suffix_required and relative.suffix.lower() not in TEXT_SUFFIXES:
-        raise RuntimeRequestError("UNSUPPORTED_FILE_TYPE", f"Unsupported editable file type: {relative.suffix or '(none)'}")
+        raise RuntimeRequestError(
+            "UNSUPPORTED_FILE_TYPE",
+            f"Unsupported editable file type: {relative.suffix or '(none)'}",
+        )
     target = (root / Path(*relative.parts)).resolve()
     try:
         target.relative_to(root.resolve())
@@ -150,7 +153,8 @@ def _editable_files(root: Path) -> list[Path]:
     if not root.exists():
         return []
     return sorted(
-        path for path in root.rglob("*")
+        path
+        for path in root.rglob("*")
         if path.is_file() and path.suffix.lower() in TEXT_SUFFIXES and "__pycache__" not in path.parts
     )
 
@@ -193,18 +197,22 @@ def _revision_graph(root: Path, current: set[str]) -> list[dict[str, Any]]:
         down = revision.down_revision
         down_revisions = list(down) if isinstance(down, tuple) else ([] if down is None else [down])
         dependencies = revision.dependencies
-        depends_on = list(dependencies) if isinstance(dependencies, tuple) else ([] if dependencies is None else [dependencies])
-        nodes.append({
-            "revision": revision.revision,
-            "path": Path(revision.path).resolve().relative_to(root.resolve()).as_posix(),
-            "downRevisions": down_revisions,
-            "branchLabels": sorted(revision.branch_labels or []),
-            "dependsOn": depends_on,
-            "isHead": revision.revision in heads,
-            "isBranchPoint": len(revision.nextrev) > 1,
-            "isMergePoint": len(down_revisions) > 1,
-            "isCurrent": revision.revision in current,
-        })
+        depends_on = (
+            list(dependencies) if isinstance(dependencies, tuple) else ([] if dependencies is None else [dependencies])
+        )
+        nodes.append(
+            {
+                "revision": revision.revision,
+                "path": Path(revision.path).resolve().relative_to(root.resolve()).as_posix(),
+                "downRevisions": down_revisions,
+                "branchLabels": sorted(revision.branch_labels or []),
+                "dependsOn": depends_on,
+                "isHead": revision.revision in heads,
+                "isBranchPoint": len(revision.nextrev) > 1,
+                "isMergePoint": len(down_revisions) > 1,
+                "isCurrent": revision.revision in current,
+            }
+        )
     return nodes
 
 
@@ -230,43 +238,63 @@ def _schema(root: Path) -> dict[str, Any]:
             columns = []
             for column in inspector.get_columns(table_name):
                 name = str(column["name"])
-                columns.append({
-                    "name": name,
-                    "type": column["type"].compile(dialect=engine.dialect),
-                    "nullable": bool(column.get("nullable", True)),
-                    "default": None if column.get("default") is None else str(column["default"]),
-                    "primaryKeyPosition": pk_columns.index(name) + 1 if name in pk_columns else 0,
-                })
-            foreign_keys = [{
-                "name": item.get("name"),
-                "columns": list(item.get("constrained_columns") or []),
-                "referredTable": str(item.get("referred_table") or ""),
-                "referredColumns": list(item.get("referred_columns") or []),
-                "options": _json_value(item.get("options") or {}),
-            } for item in inspector.get_foreign_keys(table_name)]
-            unique_constraints = [{
-                "name": item.get("name"),
-                "columns": list(item.get("column_names") or []),
-            } for item in inspector.get_unique_constraints(table_name)]
-            check_constraints = [{
-                "name": item.get("name"),
-                "sqlText": str(item.get("sqltext") or ""),
-            } for item in inspector.get_check_constraints(table_name)]
-            indexes = [{
-                "name": str(item.get("name") or ""),
-                "columns": list(item.get("column_names") or []),
-                "unique": bool(item.get("unique", False)),
-            } for item in inspector.get_indexes(table_name)]
-            tables.append({
-                "name": table_name,
-                "columns": columns,
-                "primaryKey": {"name": pk.get("name"), "columns": pk_columns},
-                "foreignKeys": foreign_keys,
-                "uniqueConstraints": unique_constraints,
-                "checkConstraints": check_constraints,
-                "indexes": indexes,
-            })
-        return {"dialect": DATABASE_MODE, "tables": tables, "alembicVersion": _version_rows(connection, inspector)}
+                columns.append(
+                    {
+                        "name": name,
+                        "type": column["type"].compile(dialect=engine.dialect),
+                        "nullable": bool(column.get("nullable", True)),
+                        "default": None if column.get("default") is None else str(column["default"]),
+                        "primaryKeyPosition": pk_columns.index(name) + 1 if name in pk_columns else 0,
+                    }
+                )
+            foreign_keys = [
+                {
+                    "name": item.get("name"),
+                    "columns": list(item.get("constrained_columns") or []),
+                    "referredTable": str(item.get("referred_table") or ""),
+                    "referredColumns": list(item.get("referred_columns") or []),
+                    "options": _json_value(item.get("options") or {}),
+                }
+                for item in inspector.get_foreign_keys(table_name)
+            ]
+            unique_constraints = [
+                {
+                    "name": item.get("name"),
+                    "columns": list(item.get("column_names") or []),
+                }
+                for item in inspector.get_unique_constraints(table_name)
+            ]
+            check_constraints = [
+                {
+                    "name": item.get("name"),
+                    "sqlText": str(item.get("sqltext") or ""),
+                }
+                for item in inspector.get_check_constraints(table_name)
+            ]
+            indexes = [
+                {
+                    "name": str(item.get("name") or ""),
+                    "columns": list(item.get("column_names") or []),
+                    "unique": bool(item.get("unique", False)),
+                }
+                for item in inspector.get_indexes(table_name)
+            ]
+            tables.append(
+                {
+                    "name": table_name,
+                    "columns": columns,
+                    "primaryKey": {"name": pk.get("name"), "columns": pk_columns},
+                    "foreignKeys": foreign_keys,
+                    "uniqueConstraints": unique_constraints,
+                    "checkConstraints": check_constraints,
+                    "indexes": indexes,
+                }
+            )
+        return {
+            "dialect": DATABASE_MODE,
+            "tables": tables,
+            "alembicVersion": _version_rows(connection, inspector),
+        }
     finally:
         connection.close()
         engine.dispose()
@@ -293,7 +321,10 @@ def _delete_revision(root: Path, value: str) -> dict[str, Any]:
     if revision is None:
         raise RuntimeRequestError("REVISION_NOT_FOUND", f"File is not an Alembic revision: {value}")
     if revision["revision"] in before_state["schema"]["alembicVersion"]:
-        raise RuntimeRequestError("REVISION_ALREADY_APPLIED", f"Downgrade revision {revision['revision']} before deleting it")
+        raise RuntimeRequestError(
+            "REVISION_ALREADY_APPLIED",
+            f"Downgrade revision {revision['revision']} before deleting it",
+        )
     if not revision["isHead"]:
         raise RuntimeRequestError("REVISION_NOT_HEAD", f"Only a revision head can be deleted: {revision['revision']}")
 
@@ -323,7 +354,16 @@ def _schema_diff(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any
             elif new is None:
                 changes.append({"kind": kind, "table": table, "name": name, "change": "deleted", "before": old})
             elif old != new:
-                changes.append({"kind": kind, "table": table, "name": name, "change": "modified", "before": old, "after": new})
+                changes.append(
+                    {
+                        "kind": kind,
+                        "table": table,
+                        "name": name,
+                        "change": "modified",
+                        "before": old,
+                        "after": new,
+                    }
+                )
 
     before_tables = {table["name"]: table for table in before["tables"]}
     after_tables = {table["name"]: table for table in after["tables"]}
@@ -331,17 +371,69 @@ def _schema_diff(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any
         old_table = before_tables.get(table_name)
         new_table = after_tables.get(table_name)
         if old_table is None:
-            changes.append({"kind": "table", "table": table_name, "name": table_name, "change": "added", "after": new_table})
+            changes.append(
+                {
+                    "kind": "table",
+                    "table": table_name,
+                    "name": table_name,
+                    "change": "added",
+                    "after": new_table,
+                }
+            )
             continue
         if new_table is None:
-            changes.append({"kind": "table", "table": table_name, "name": table_name, "change": "deleted", "before": old_table})
+            changes.append(
+                {
+                    "kind": "table",
+                    "table": table_name,
+                    "name": table_name,
+                    "change": "deleted",
+                    "before": old_table,
+                }
+            )
             continue
-        compare("column", table_name, _named_items(old_table["columns"], lambda item: item["name"]), _named_items(new_table["columns"], lambda item: item["name"]))
-        compare("primaryKey", table_name, {"primary": old_table["primaryKey"]}, {"primary": new_table["primaryKey"]})
-        compare("foreignKey", table_name, _named_items(old_table["foreignKeys"], lambda item: item["name"] or ",".join(item["columns"])), _named_items(new_table["foreignKeys"], lambda item: item["name"] or ",".join(item["columns"])))
-        compare("uniqueConstraint", table_name, _named_items(old_table["uniqueConstraints"], lambda item: item["name"] or ",".join(item["columns"])), _named_items(new_table["uniqueConstraints"], lambda item: item["name"] or ",".join(item["columns"])))
-        compare("checkConstraint", table_name, _named_items(old_table["checkConstraints"], lambda item: item["name"] or item["sqlText"]), _named_items(new_table["checkConstraints"], lambda item: item["name"] or item["sqlText"]))
-        compare("index", table_name, _named_items(old_table["indexes"], lambda item: item["name"]), _named_items(new_table["indexes"], lambda item: item["name"]))
+        compare(
+            "column",
+            table_name,
+            _named_items(old_table["columns"], lambda item: item["name"]),
+            _named_items(new_table["columns"], lambda item: item["name"]),
+        )
+        compare(
+            "primaryKey",
+            table_name,
+            {"primary": old_table["primaryKey"]},
+            {"primary": new_table["primaryKey"]},
+        )
+        compare(
+            "foreignKey",
+            table_name,
+            _named_items(old_table["foreignKeys"], lambda item: item["name"] or ",".join(item["columns"])),
+            _named_items(new_table["foreignKeys"], lambda item: item["name"] or ",".join(item["columns"])),
+        )
+        compare(
+            "uniqueConstraint",
+            table_name,
+            _named_items(
+                old_table["uniqueConstraints"],
+                lambda item: item["name"] or ",".join(item["columns"]),
+            ),
+            _named_items(
+                new_table["uniqueConstraints"],
+                lambda item: item["name"] or ",".join(item["columns"]),
+            ),
+        )
+        compare(
+            "checkConstraint",
+            table_name,
+            _named_items(old_table["checkConstraints"], lambda item: item["name"] or item["sqlText"]),
+            _named_items(new_table["checkConstraints"], lambda item: item["name"] or item["sqlText"]),
+        )
+        compare(
+            "index",
+            table_name,
+            _named_items(old_table["indexes"], lambda item: item["name"]),
+            _named_items(new_table["indexes"], lambda item: item["name"]),
+        )
     return {
         "changes": changes,
         "alembicVersion": {"before": before["alembicVersion"], "after": after["alembicVersion"]},
@@ -383,7 +475,9 @@ def _parse_options(
         else:
             positionals.append(item)
             index += 1
-    if len(positionals) < minimum_positionals or (maximum_positionals is not None and len(positionals) > maximum_positionals):
+    if len(positionals) < minimum_positionals or (
+        maximum_positionals is not None and len(positionals) > maximum_positionals
+    ):
         maximum = "unbounded" if maximum_positionals is None else str(maximum_positionals)
         raise RuntimeRequestError(
             "INVALID_ALEMBIC_ARGUMENTS",
@@ -419,14 +513,22 @@ def _dispatch(root: Path, argv: list[str], stdout: io.StringIO) -> None:
     os.chdir(root)
     try:
         if name == "init":
-            positionals, options = _parse_options(arguments, {"-t": "template", "--template": "template"}, {"--package": "package"}, 0, 1)
+            positionals, options = _parse_options(
+                arguments,
+                {"-t": "template", "--template": "template"},
+                {"--package": "package"},
+                0,
+                1,
+            )
             directory = positionals[0] if positionals else "alembic"
             _relative_path(root, directory, suffix_required=False)
             if not re.fullmatch(r"[A-Za-z0-9_-]+", directory):
                 raise RuntimeRequestError("INVALID_PATH", "Alembic directory must be one workspace-root directory name")
             template = options.get("template", "generic")
             if template != "generic":
-                raise RuntimeRequestError("UNSUPPORTED_ALEMBIC_OPTION", "Only the generic Alembic template is supported")
+                raise RuntimeRequestError(
+                    "UNSUPPORTED_ALEMBIC_OPTION", "Only the generic Alembic template is supported"
+                )
             config = Config(str(root / "alembic.ini"), stdout=stdout, output_buffer=stdout)
             command.init(config, directory, template=template, package=options.get("package", False))
             _prepare_initialized_workspace(root, directory)
@@ -436,7 +538,14 @@ def _dispatch(root: Path, argv: list[str], stdout: io.StringIO) -> None:
         if name == "revision":
             positionals, options = _parse_options(
                 arguments,
-                {"-m": "message", "--message": "message", "--head": "head", "--branch-label": "branch_label", "--rev-id": "rev_id", "--depends-on": "depends_on"},
+                {
+                    "-m": "message",
+                    "--message": "message",
+                    "--head": "head",
+                    "--branch-label": "branch_label",
+                    "--rev-id": "rev_id",
+                    "--depends-on": "depends_on",
+                },
                 {"--autogenerate": "autogenerate", "--splice": "splice"},
                 0,
                 0,
@@ -454,7 +563,12 @@ def _dispatch(root: Path, argv: list[str], stdout: io.StringIO) -> None:
             positionals, options = _parse_options(
                 arguments,
                 {"-r": "rev_range", "--rev-range": "rev_range"},
-                {"-v": "verbose", "--verbose": "verbose", "-i": "indicate_current", "--indicate-current": "indicate_current"},
+                {
+                    "-v": "verbose",
+                    "--verbose": "verbose",
+                    "-i": "indicate_current",
+                    "--indicate-current": "indicate_current",
+                },
                 0,
                 0,
             )
@@ -464,7 +578,11 @@ def _dispatch(root: Path, argv: list[str], stdout: io.StringIO) -> None:
             positionals, options = _parse_options(
                 arguments,
                 {},
-                {"-v": "verbose", "--verbose": "verbose", "--resolve-dependencies": "resolve_dependencies"},
+                {
+                    "-v": "verbose",
+                    "--verbose": "verbose",
+                    "--resolve-dependencies": "resolve_dependencies",
+                },
                 0,
                 0,
             )
@@ -481,7 +599,12 @@ def _dispatch(root: Path, argv: list[str], stdout: io.StringIO) -> None:
         elif name == "merge":
             positionals, options = _parse_options(
                 arguments,
-                {"-m": "message", "--message": "message", "--branch-label": "branch_label", "--rev-id": "rev_id"},
+                {
+                    "-m": "message",
+                    "--message": "message",
+                    "--branch-label": "branch_label",
+                    "--rev-id": "rev_id",
+                },
                 {},
                 2,
                 None,
@@ -500,7 +623,11 @@ def _import_clone(root: Path, seed: dict[str, Any]) -> None:
         raise RuntimeRequestError("WORKSPACE_ALREADY_EXISTS", "Clone target must be an empty workspace")
     root.mkdir(parents=True, exist_ok=True)
     for item in seed["files"]:
-        if not isinstance(item, dict) or not isinstance(item.get("path"), str) or not isinstance(item.get("content"), str):
+        if (
+            not isinstance(item, dict)
+            or not isinstance(item.get("path"), str)
+            or not isinstance(item.get("content"), str)
+        ):
             raise RuntimeRequestError("INVALID_CLONE_SEED", "Clone seed file is invalid")
         content = item["content"]
         if len(content.encode("utf-8")) > MAX_FILE_BYTES:
@@ -599,7 +726,11 @@ def _data_tag(value):
     if isinstance(value, bool):
         return {"tag": "boolean", "value": value}
     if isinstance(value, int):
-        return {"tag": "bigint", "value": str(value)} if abs(value) > 9007199254740991 else {"tag": "number", "value": value}
+        return (
+            {"tag": "bigint", "value": str(value)}
+            if abs(value) > 9007199254740991
+            else {"tag": "number", "value": value}
+        )
     if isinstance(value, float):
         if value != value:
             return {"tag": "special-number", "value": "NaN"}
@@ -615,7 +746,11 @@ def _data_tag(value):
     if isinstance(value, (bytes, memoryview)):
         return {"tag": "bytea", "value": base64.b64encode(value).decode("ascii")}
     if isinstance(value, datetime.datetime):
-        return {"tag": "timestamp", "value": value.isoformat(), "dataTypeId": 1184 if value.tzinfo else 1114}
+        return {
+            "tag": "timestamp",
+            "value": value.isoformat(),
+            "dataTypeId": 1184 if value.tzinfo else 1114,
+        }
     if isinstance(value, datetime.date):
         return {"tag": "date", "value": value.isoformat(), "dataTypeId": 1082}
     if isinstance(value, datetime.time):
@@ -639,7 +774,12 @@ def _read_table(root: Path, name: str):
             if list(table.primary_key.columns):
                 statement = statement.order_by(*table.primary_key.columns)
             rows = connection.execute(statement).fetchall()
-            data = {"table": name, "columns": list(table.columns.keys()), "rows": [[_data_tag(cell) for cell in row] for row in rows[:50]], "truncated": len(rows) > 50}
+            data = {
+                "table": name,
+                "columns": list(table.columns.keys()),
+                "rows": [[_data_tag(cell) for cell in row] for row in rows[:50]],
+                "truncated": len(rows) > 50,
+            }
             if len(json.dumps(data).encode("utf-8")) > 1024 * 1024:
                 raise RuntimeRequestError("DATA_PREVIEW_TOO_LARGE", "Data preview exceeds 1 MiB")
             return data
@@ -665,7 +805,10 @@ def handle(request_json: str) -> str:
         try:
             source = request["command"]
             if any(token in source for token in ("|", ">", "<", ";", "`", "$(", "&&", "\n", "\r")):
-                raise RuntimeRequestError("UNSUPPORTED_SHELL_SYNTAX", "Shell operators and command substitution are not supported")
+                raise RuntimeRequestError(
+                    "UNSUPPORTED_SHELL_SYNTAX",
+                    "Shell operators and command substitution are not supported",
+                )
             argv = shlex.split(source)
         except ValueError as error:
             raise RuntimeRequestError("INVALID_ALEMBIC_ARGUMENTS", str(error)) from error
@@ -686,7 +829,13 @@ def handle(request_json: str) -> str:
             raise RuntimeRequestError("FILE_NOT_FOUND", f"File does not exist: {request.get('path', '')}")
         if target.stat().st_size > MAX_FILE_BYTES:
             raise RuntimeRequestError("FILE_TOO_LARGE", "File exceeds the 1 MiB editor limit")
-        return json.dumps({"type": "FILE_CONTENT", "path": target.relative_to(root).as_posix(), "content": target.read_text(encoding="utf-8")})
+        return json.dumps(
+            {
+                "type": "FILE_CONTENT",
+                "path": target.relative_to(root).as_posix(),
+                "content": target.read_text(encoding="utf-8"),
+            }
+        )
     if request_type == "WRITE_FILE":
         target = _relative_path(root, request.get("path", ""))
         content = request.get("content")
@@ -696,7 +845,13 @@ def handle(request_json: str) -> str:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
         after = _file_manifest(root)
-        return json.dumps({"type": "FILE_WRITTEN", "state": _state(root), "fileChanges": _file_changes(before, after)})
+        return json.dumps(
+            {
+                "type": "FILE_WRITTEN",
+                "state": _state(root),
+                "fileChanges": _file_changes(before, after),
+            }
+        )
     if request_type == "DELETE_REVISION":
         return json.dumps(_delete_revision(root, request.get("path", "")))
     if request_type == "INSPECT":
@@ -708,12 +863,24 @@ def handle_safely(request_json: str) -> str:
     try:
         return handle(request_json)
     except RuntimeRequestError as exception:
-        return json.dumps({
-            "type": "ERROR",
-            "error": {"code": exception.code, "message": str(exception), "traceback": traceback.format_exc()},
-        })
+        return json.dumps(
+            {
+                "type": "ERROR",
+                "error": {
+                    "code": exception.code,
+                    "message": str(exception),
+                    "traceback": traceback.format_exc(),
+                },
+            }
+        )
     except Exception as exception:
-        return json.dumps({
-            "type": "ERROR",
-            "error": {"code": "ALEMBIC_RUNTIME_ERROR", "message": str(exception), "traceback": traceback.format_exc()},
-        })
+        return json.dumps(
+            {
+                "type": "ERROR",
+                "error": {
+                    "code": "ALEMBIC_RUNTIME_ERROR",
+                    "message": str(exception),
+                    "traceback": traceback.format_exc(),
+                },
+            }
+        )

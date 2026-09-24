@@ -1,7 +1,22 @@
 import {
-  CONTROL, CONTROL_BYTES, PROTOCOL_VERSION, RESPONSE_BYTES, STATE, isEnvelope, isRecord, isAlembicRuntimeReply,
-  type CommandResult, type DatabaseMode, type FileChange, type PythonWorkspaceSeed, type RpcFault, type RuntimeCloneSeed,
-  type AlembicRuntimeReply, type SqliteWorkerBoot, type WorkerBoot, type WorkspaceState,
+  CONTROL,
+  CONTROL_BYTES,
+  PROTOCOL_VERSION,
+  RESPONSE_BYTES,
+  STATE,
+  isEnvelope,
+  isRecord,
+  isAlembicRuntimeReply,
+  type CommandResult,
+  type DatabaseMode,
+  type FileChange,
+  type PythonWorkspaceSeed,
+  type RpcFault,
+  type RuntimeCloneSeed,
+  type AlembicRuntimeReply,
+  type SqliteWorkerBoot,
+  type WorkerBoot,
+  type WorkspaceState,
 } from "./protocol";
 import { RuntimeClientError } from "./runtime-client";
 
@@ -28,21 +43,34 @@ function waitForBoot(worker: Worker, requestId: string): Promise<void> {
       window.clearTimeout(timeout);
       worker.removeEventListener("message", onMessage);
       worker.removeEventListener("error", onError);
-      if (error) reject(error); else resolve();
+      if (error) reject(error);
+      else resolve();
     };
     const onMessage = (event: MessageEvent<unknown>) => {
       const value = event.data;
       if (!isEnvelope(value) || value.requestId !== requestId) return;
       if (!isAlembicRuntimeReply(value)) {
-        finish(new RuntimeClientError({ code: "RUNTIME_INVALID_RESPONSE", message: "Invalid Alembic boot response" }));
+        finish(
+          new RuntimeClientError({
+            code: "RUNTIME_INVALID_RESPONSE",
+            message: "Invalid Alembic boot response",
+          }),
+        );
         return;
       }
       if (value.type === "READY") finish();
       else if (value.type === "ERROR") finish(new RuntimeClientError(value.error));
     };
-    const onError = (event: ErrorEvent) => finish(new RuntimeClientError({ code: "RUNTIME_WORKER_CRASH", message: event.message }));
+    const onError = (event: ErrorEvent) =>
+      finish(new RuntimeClientError({ code: "RUNTIME_WORKER_CRASH", message: event.message }));
     const timeout = window.setTimeout(
-      () => finish(new RuntimeClientError({ code: "RUNTIME_BOOT_TIMEOUT", message: "Alembic runtime boot exceeded 90 seconds" })),
+      () =>
+        finish(
+          new RuntimeClientError({
+            code: "RUNTIME_BOOT_TIMEOUT",
+            message: "Alembic runtime boot exceeded 90 seconds",
+          }),
+        ),
       90_000,
     );
     worker.addEventListener("message", onMessage);
@@ -61,7 +89,11 @@ export class AlembicRuntimeClient {
   private readonly pgliteDatabaseId: string;
   private readonly pending = new Map<string, PendingRequest>();
 
-  constructor(readonly mode: DatabaseMode, readonly workspaceId = `${mode}-${crypto.randomUUID()}`, private readonly cloneSeed?: RuntimeCloneSeed) {
+  constructor(
+    readonly mode: DatabaseMode,
+    readonly workspaceId = `${mode}-${crypto.randomUUID()}`,
+    private readonly cloneSeed?: RuntimeCloneSeed,
+  ) {
     this.pgliteDatabaseId = `${workspaceId}-${crypto.randomUUID()}`;
   }
 
@@ -72,7 +104,9 @@ export class AlembicRuntimeClient {
   }
 
   async createWorkspace(): Promise<WorkspaceState> {
-    const seed = this.cloneSeed ? { files: this.cloneSeed.files, sqliteDatabase: this.cloneSeed.sqliteDatabase } : undefined;
+    const seed = this.cloneSeed
+      ? { files: this.cloneSeed.files, sqliteDatabase: this.cloneSeed.sqliteDatabase }
+      : undefined;
     const reply = await this.request({ type: "CREATE_WORKSPACE", seed });
     if (reply.type !== "WORKSPACE_CREATED") throw this.invalidReply(reply);
     return reply.state;
@@ -82,7 +116,11 @@ export class AlembicRuntimeClient {
     const reply = await this.request({ type: "EXPORT_CLONE" });
     if (reply.type !== "CLONE_EXPORTED") throw this.invalidReply(reply);
     if (this.mode === "sqlite") return reply.seed;
-    return { ...reply.seed, pgliteDatabase: await this.exportPgliteDatabase(), pgliteDatabaseId: this.pgliteDatabaseId };
+    return {
+      ...reply.seed,
+      pgliteDatabase: await this.exportPgliteDatabase(),
+      pgliteDatabaseId: this.pgliteDatabaseId,
+    };
   }
 
   async runAlembic(argv: string[]): Promise<CommandResult> {
@@ -129,15 +167,23 @@ export class AlembicRuntimeClient {
 
   async destroy(): Promise<void> {
     if (this.mode === "postgresql" && this.pgliteWorker) {
-      try { await this.deletePgliteDatabase(); }
-      finally { this.close(); }
+      try {
+        await this.deletePgliteDatabase();
+      } finally {
+        this.close();
+      }
       return;
     }
     this.close();
   }
 
   forceCrashForTest(): void {
-    this.stop(new RuntimeClientError({ code: "RUNTIME_WORKER_CRASH", message: "Worker was forcibly terminated by the T8 test hook" }));
+    this.stop(
+      new RuntimeClientError({
+        code: "RUNTIME_WORKER_CRASH",
+        message: "Worker was forcibly terminated by the T8 test hook",
+      }),
+    );
     this.starting = undefined;
   }
 
@@ -148,10 +194,16 @@ export class AlembicRuntimeClient {
 
   private async boot(): Promise<void> {
     if (this.mode === "postgresql" && (!crossOriginIsolated || typeof SharedArrayBuffer === "undefined")) {
-      throw new RuntimeClientError({ code: "POSTGRESQL_UNAVAILABLE", message: "PostgreSQL requires cross-origin isolation and SharedArrayBuffer" });
+      throw new RuntimeClientError({
+        code: "POSTGRESQL_UNAVAILABLE",
+        message: "PostgreSQL requires cross-origin isolation and SharedArrayBuffer",
+      });
     }
     const requestId = crypto.randomUUID();
-    const worker = new Worker(new URL("./pyodide.worker.ts", import.meta.url), { type: "module", name: `revision-lab-${this.mode}` });
+    const worker = new Worker(new URL("./pyodide.worker.ts", import.meta.url), {
+      type: "module",
+      name: `revision-lab-${this.mode}`,
+    });
     this.worker = worker;
     worker.addEventListener("message", this.handleMessage);
     worker.addEventListener("error", this.handleCrash);
@@ -170,18 +222,28 @@ export class AlembicRuntimeClient {
         const control = new SharedArrayBuffer(CONTROL_BYTES);
         const response = new SharedArrayBuffer(RESPONSE_BYTES);
         this.control = new Int32Array(control);
-        const pglite = new Worker(new URL("./pglite.worker.ts", import.meta.url), { type: "module", name: "revision-lab-alembic-pglite" });
+        const pglite = new Worker(new URL("./pglite.worker.ts", import.meta.url), {
+          type: "module",
+          name: "revision-lab-alembic-pglite",
+        });
         this.pgliteWorker = pglite;
         pglite.addEventListener("error", this.handleCrash);
         pglite.addEventListener("messageerror", this.handleMessageError);
         const pgReady = waitForBoot(pglite, requestId);
-        const databaseDump = this.cloneSeed?.pgliteDatabase instanceof ArrayBuffer
-          ? new Blob([this.cloneSeed.pgliteDatabase], { type: "application/gzip" })
-          : this.cloneSeed?.pgliteDatabase;
-        const common = { ...boot, type: "BOOT", runtime: "alembic", control, response,
+        const databaseDump =
+          this.cloneSeed?.pgliteDatabase instanceof ArrayBuffer
+            ? new Blob([this.cloneSeed.pgliteDatabase], { type: "application/gzip" })
+            : this.cloneSeed?.pgliteDatabase;
+        const common = {
+          ...boot,
+          type: "BOOT",
+          runtime: "alembic",
+          control,
+          response,
           databaseId: this.pgliteDatabaseId,
           previousDatabaseId: this.cloneSeed?.reusePgliteDatabase ? this.cloneSeed.pgliteDatabaseId : undefined,
-          databaseDump } satisfies Omit<WorkerBoot, "port">;
+          databaseDump,
+        } satisfies Omit<WorkerBoot, "port">;
         worker.postMessage({ ...common, port: channel.port1 }, [channel.port1]);
         pglite.postMessage({ ...common, port: channel.port2 }, [channel.port2]);
         await Promise.all([ready, pgReady]);
@@ -198,16 +260,32 @@ export class AlembicRuntimeClient {
 
   private async request(body: RequestBody, timeoutMs = 15_000): Promise<AlembicRuntimeReply> {
     await this.start();
-    if (this.pending.size > 0) throw new RuntimeClientError({ code: "RUNTIME_BUSY", message: "A workspace request is already running" });
+    if (this.pending.size > 0)
+      throw new RuntimeClientError({
+        code: "RUNTIME_BUSY",
+        message: "A workspace request is already running",
+      });
     const worker = this.worker;
-    if (!worker) throw new RuntimeClientError({ code: "RUNTIME_NOT_READY", message: "Alembic runtime is not ready" });
+    if (!worker)
+      throw new RuntimeClientError({
+        code: "RUNTIME_NOT_READY",
+        message: "Alembic runtime is not ready",
+      });
     const requestId = crypto.randomUUID();
-    const request = { protocolVersion: PROTOCOL_VERSION, requestId, workspaceId: this.workspaceId, ...body };
+    const request = {
+      protocolVersion: PROTOCOL_VERSION,
+      requestId,
+      workspaceId: this.workspaceId,
+      ...body,
+    };
     return new Promise((resolve, reject) => {
       const timeout = window.setTimeout(() => {
         this.pending.delete(requestId);
         const error = new RuntimeClientError({
-          code: body.type === "RUN_ALEMBIC" || body.type === "RUN_COMMAND" ? "ALEMBIC_COMMAND_TIMEOUT" : "RUNTIME_REQUEST_TIMEOUT",
+          code:
+            body.type === "RUN_ALEMBIC" || body.type === "RUN_COMMAND"
+              ? "ALEMBIC_COMMAND_TIMEOUT"
+              : "RUNTIME_REQUEST_TIMEOUT",
           message: `${body.type} exceeded ${timeoutMs} ms`,
         });
         this.stop(error);
@@ -231,7 +309,12 @@ export class AlembicRuntimeClient {
     this.pending.delete(value.requestId);
     window.clearTimeout(pending.timeout);
     if (!isAlembicRuntimeReply(value)) {
-      pending.reject(new RuntimeClientError({ code: "RUNTIME_INVALID_RESPONSE", message: "Invalid Alembic runtime response" }));
+      pending.reject(
+        new RuntimeClientError({
+          code: "RUNTIME_INVALID_RESPONSE",
+          message: "Invalid Alembic runtime response",
+        }),
+      );
       return;
     }
     if (value.type === "ERROR") pending.reject(new RuntimeClientError(value.error));
@@ -244,17 +327,31 @@ export class AlembicRuntimeClient {
   };
 
   private readonly handleMessageError = () => {
-    this.stop(new RuntimeClientError({ code: "RUNTIME_WORKER_CRASH", message: "Worker message could not be decoded" }));
+    this.stop(
+      new RuntimeClientError({
+        code: "RUNTIME_WORKER_CRASH",
+        message: "Worker message could not be decoded",
+      }),
+    );
   };
 
   private invalidReply(reply: AlembicRuntimeReply): RuntimeClientError {
     const type = isEnvelope(reply) && isRecord(reply) ? String(reply.type) : "unknown";
-    return new RuntimeClientError({ code: "RUNTIME_INVALID_RESPONSE", message: `Unexpected Alembic response: ${type}` });
+    return new RuntimeClientError({
+      code: "RUNTIME_INVALID_RESPONSE",
+      message: `Unexpected Alembic response: ${type}`,
+    });
   }
 
   private exportPgliteDatabase(): Promise<Blob> {
     const worker = this.pgliteWorker;
-    if (!worker) return Promise.reject(new RuntimeClientError({ code: "PGLITE_EXPORT_FAILED", message: "PGlite runtime is not ready" }));
+    if (!worker)
+      return Promise.reject(
+        new RuntimeClientError({
+          code: "PGLITE_EXPORT_FAILED",
+          message: "PGlite runtime is not ready",
+        }),
+      );
     const requestId = crypto.randomUUID();
     return new Promise((resolve, reject) => {
       const finish = (error?: Error, dump?: Blob) => {
@@ -265,18 +362,40 @@ export class AlembicRuntimeClient {
       };
       const onMessage = (event: MessageEvent<unknown>) => {
         const value = event.data;
-        if (!isEnvelope(value) || value.requestId !== requestId || value.workspaceId !== this.workspaceId || !isRecord(value)) return;
+        if (
+          !isEnvelope(value) ||
+          value.requestId !== requestId ||
+          value.workspaceId !== this.workspaceId ||
+          !isRecord(value)
+        )
+          return;
         if (value.type === "PGLITE_EXPORTED" && value.dump instanceof Blob) finish(undefined, value.dump);
-        else if (value.type === "ERROR" && isRecord(value.error) && typeof value.error.code === "string" && typeof value.error.message === "string") {
+        else if (
+          value.type === "ERROR" &&
+          isRecord(value.error) &&
+          typeof value.error.code === "string" &&
+          typeof value.error.message === "string"
+        ) {
           finish(new RuntimeClientError({ code: value.error.code, message: value.error.message }));
         }
       };
       const timeout = window.setTimeout(
-        () => finish(new RuntimeClientError({ code: "PGLITE_EXPORT_TIMEOUT", message: "PGlite clone export exceeded 15 seconds" })),
+        () =>
+          finish(
+            new RuntimeClientError({
+              code: "PGLITE_EXPORT_TIMEOUT",
+              message: "PGlite clone export exceeded 15 seconds",
+            }),
+          ),
         15_000,
       );
       worker.addEventListener("message", onMessage);
-      worker.postMessage({ protocolVersion: PROTOCOL_VERSION, requestId, workspaceId: this.workspaceId, type: "EXPORT_PGLITE" });
+      worker.postMessage({
+        protocolVersion: PROTOCOL_VERSION,
+        requestId,
+        workspaceId: this.workspaceId,
+        type: "EXPORT_PGLITE",
+      });
     });
   }
 
@@ -288,22 +407,45 @@ export class AlembicRuntimeClient {
       const finish = (error?: Error) => {
         window.clearTimeout(timeout);
         worker.removeEventListener("message", onMessage);
-        if (error) reject(error); else resolve();
+        if (error) reject(error);
+        else resolve();
       };
       const onMessage = (event: MessageEvent<unknown>) => {
         const value = event.data;
-        if (!isEnvelope(value) || value.requestId !== requestId || value.workspaceId !== this.workspaceId || !isRecord(value)) return;
+        if (
+          !isEnvelope(value) ||
+          value.requestId !== requestId ||
+          value.workspaceId !== this.workspaceId ||
+          !isRecord(value)
+        )
+          return;
         if (value.type === "PGLITE_DELETED") finish();
-        else if (value.type === "ERROR" && isRecord(value.error) && typeof value.error.code === "string" && typeof value.error.message === "string") {
+        else if (
+          value.type === "ERROR" &&
+          isRecord(value.error) &&
+          typeof value.error.code === "string" &&
+          typeof value.error.message === "string"
+        ) {
           finish(new RuntimeClientError({ code: value.error.code, message: value.error.message }));
         }
       };
       const timeout = window.setTimeout(
-        () => finish(new RuntimeClientError({ code: "PGLITE_DELETE_TIMEOUT", message: "PGlite deletion exceeded 15 seconds" })),
+        () =>
+          finish(
+            new RuntimeClientError({
+              code: "PGLITE_DELETE_TIMEOUT",
+              message: "PGlite deletion exceeded 15 seconds",
+            }),
+          ),
         15_000,
       );
       worker.addEventListener("message", onMessage);
-      worker.postMessage({ protocolVersion: PROTOCOL_VERSION, requestId, workspaceId: this.workspaceId, type: "DELETE_PGLITE" });
+      worker.postMessage({
+        protocolVersion: PROTOCOL_VERSION,
+        requestId,
+        workspaceId: this.workspaceId,
+        type: "DELETE_PGLITE",
+      });
     });
   }
 
@@ -331,5 +473,8 @@ export class AlembicRuntimeClient {
 export function runtimeFault(error: unknown): RpcFault {
   return error instanceof RuntimeClientError
     ? error.fault
-    : { code: "RUNTIME_CLIENT_ERROR", message: error instanceof Error ? error.message : String(error) };
+    : {
+        code: "RUNTIME_CLIENT_ERROR",
+        message: error instanceof Error ? error.message : String(error),
+      };
 }
